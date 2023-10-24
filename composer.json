@@ -10,9 +10,15 @@
         {
             "type": "vcs",
             "url":  "https://github.com/fabianfabian/nostr-php"
+        },
+        {
+            "type": "vcs",
+            "url":  "https://github.com/fabianfabian/phpecc"
         }
     ],
     "require": {
-        "swentel/nostr-php": "dev-verify-method"
+        "php": "^7.4|^8.0",
+        "swentel/nostr-php": "dev-verify-method",
+        "public-square/phpecc": "dev-php-7.4"
     }
 }
