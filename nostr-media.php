@@ -72,7 +72,7 @@ function validate_authorization_header() {
         // Decode the base64 encoded string
         $jsonString = base64_decode($base64);
 
-        // Verifiy event signature
+        // Verify event signature
         if (!Event::verify($jsonString)) {
             return ["valid" => false];
         }
@@ -315,3 +315,32 @@ function nostr_custom_parse_request($wp) {
 add_action('parse_request', 'nostr_custom_parse_request');
 
 
+
+
+// Upon plugin activation, check if ext-gmp is enabled.
+function my_plugin_activation_check() {
+    if (!extension_loaded('gmp')) {
+        deactivate_plugins(plugin_basename(__FILE__)); // Deactivate our plugin.
+        wp_die('Error! Your server needs the GMP PHP extension enabled to use this plugin. Please contact your hosting provider or server administrator to enable the GMP extension.');
+    }
+
+    if (!extension_loaded('xml')) {
+        deactivate_plugins(plugin_basename(__FILE__)); // Deactivate our plugin.
+        wp_die('Error! Your server needs the XML PHP extension enabled to use this plugin. Please contact your hosting provider or server administrator to enable the XML extension.');
+    }
+
+    
+}
+register_activation_hook(__FILE__, 'my_plugin_activation_check');
+
+// Admin notice for showing any errors.
+function my_plugin_admin_notices() {
+    if (!extension_loaded('gmp')) {
+        printf('<div class="notice notice-error"><p>%1$s</p></div>', esc_html__('Error! Your server needs the GMP PHP extension enabled to use this plugin.'));
+    }
+
+    if (!extension_loaded('xml')) {
+        printf('<div class="notice notice-error"><p>%1$s</p></div>', esc_html__('Error! Your server needs the XML PHP extension enabled to use this plugin.'));
+    }
+}
+add_action('admin_notices', 'my_plugin_admin_notices');
