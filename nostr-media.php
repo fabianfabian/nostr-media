@@ -75,7 +75,7 @@ function validate_authorization_header() {
     if (isset($headers['Authorization'])) {
 
         if (substr($headers['Authorization'], 0, 6) !== 'Nostr ') {
-            ["valid" => false];
+            return ["valid" => false];
         }
 
         // Remove "Nostr " prefix from $headers['Authorization']
@@ -96,7 +96,7 @@ function validate_authorization_header() {
 
         // Check that pubkey is 64 characters long
         if (strlen($pubkey) !== 64) {
-            ["valid" => false];
+            return ["valid" => false];
         }
         
         // convert pubkey to npub
