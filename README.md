@@ -10,6 +10,10 @@ This is a very early rough initial version, just the minimal needed to get thing
 - Keeps original image and generates a scaled version
 - Media will be available in your WordPress back-end on the Media page.
 
+## Requirements
+- PHP 8.3 or higher
+- Mininum WordPress version unknown, tested with 6.3.2
+
 ## Installation
 1) In WordPress go to Plugins -> Add New -> Upload Plugin -> Choose nostr-media.zip -> Install Now -> Activate Plugin
 2) Go to Settings -> Permalinks -> Save Changes (don't change, just save, this will create routes needed)
