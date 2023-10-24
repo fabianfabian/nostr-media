@@ -68,7 +68,7 @@ function msp_save_custom_user_profile_fields($user_id) {
     update_user_meta($user_id, 'nostrNpub', $nostrNpub);
 }
 
-// Check if the Authorization header matches the nostrNpub
+// Check if the Authorization header matches valid NIP98 HTTP Auth 
 function validate_authorization_header() {
     $headers = getallheaders();
 
@@ -122,7 +122,7 @@ function validate_authorization_header() {
 }
 
 
-// Handle the image upload via cURL
+// Handle the image upload
 add_action('rest_api_init', function() {
     register_rest_route('nostrmedia/v1', '/upload/', array(
         'methods' => 'POST',
@@ -239,7 +239,7 @@ function handle_image_upload() {
 
 
 
-// show file hash (ox) in the Media tab
+// show file hashes (ox and x) in the Media tab
 function msp_add_file_hash_to_media_library($form_fields, $post) {
     $original_file_hash = get_post_meta($post->ID, '_wp_attachment_metadata', true)['original_file_hash'];
 
