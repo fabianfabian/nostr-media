@@ -15,18 +15,6 @@ require __DIR__ . '/vendor/autoload.php';
 use swentel\nostr\Event\Event;
 use swentel\nostr\Key\Key;
 
-// Hook for adding admin menus
-add_action('the_content', 'msp_add_text_to_content');
-
-// Action function for the above hook
-function msp_add_text_to_content($content) {
-    if(is_single()) {
-        $content = "This is added by My Simple Plugin: ".$content;
-    }
-    return $content;
-}
-
-
 // Add the custom field to the profile page
 add_action('show_user_profile', 'msp_add_custom_user_profile_fields');
 add_action('edit_user_profile', 'msp_add_custom_user_profile_fields');
