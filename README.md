@@ -16,7 +16,7 @@ This is a very early rough initial version, just the minimal needed to get thing
 
 ## Installation
 1) In WordPress go to Plugins -> Add New -> Upload Plugin -> Choose nostr-media.zip -> Install Now -> Activate Plugin
-2) Go to Settings -> Permalinks -> Save Changes (don't change, just save, this will create routes needed)
+2) Go to Settings -> Permalinks -> Save Changes (make sure its not "plain". click "Save Changes", even if there is no change, this will create routes needed for uploading).
 3) Go to Users -> Edit -> Nostr Media -> Public key (npub) -> Enter your npub here, this npub/user will be allowed to upload files to this WordPress installation. Click Update Profile to save.
 
 ## Configuring a NIP96 compatible Nostr Client
