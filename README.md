@@ -1,4 +1,4 @@
-# Nostr Media for WordPress
+# Nostr Media Uploads for WordPress
 
 Host your images and media in your own WordPress installation using this plug-in.
 
