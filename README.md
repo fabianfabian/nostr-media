@@ -11,7 +11,7 @@ This is a very early rough initial version, just the minimal needed to get thing
 - Media will be available in your WordPress back-end on the Media page.
 
 ## Requirements
-- PHP 8.1 or higher
+- PHP 7.4 or higher
 - Mininum WordPress version unknown, tested with 6.3.2
 
 ## Installation
