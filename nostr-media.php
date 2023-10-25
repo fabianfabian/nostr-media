@@ -121,11 +121,7 @@ add_action('rest_api_init', function() {
 
 // Disable default image sizes
 function msp_disable_default_image_sizes($sizes) {
-    unset($sizes['thumbnail']);
-    unset($sizes['medium']);
-    unset($sizes['medium_large']);
-    unset($sizes['large']);
-    return $sizes;
+    return [];
 }
 
 function handle_image_upload() {
