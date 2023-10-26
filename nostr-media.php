@@ -393,24 +393,31 @@ add_action('admin_notices', 'my_plugin_admin_notices');
 // We store in /a/b/hash.ext where /a/b/ is first 2 letters of the hash, so folder browsing does not become slow with too many files in one folder.
 
 function custom_upload_dir($uploads) {
-    // Assuming $original_hash is accessible here (otherwise, you'll need to calculate it again)
-    global $original_hash; // We'll set this in the file handling code later
+    // Check if we are in the specific REST route
+    $current_route = $_SERVER['REQUEST_URI'] ?? '';
 
-    $base_directory = WP_CONTENT_DIR . '/uploads/nostr';
-    $base_url = content_url('/uploads/nostr');
+    if (strpos($current_route, 'nostrmedia/v1/upload') !== false) {
+            
+        // Assuming $original_hash is accessible here (otherwise, you'll need to calculate it again)
+        global $original_hash; // We'll set this in the file handling code later
 
-    $custom_directory = '/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1);
-    $custom_url = '/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1);
+        $base_directory = WP_CONTENT_DIR . '/uploads/nostr';
+        $base_url = content_url('/uploads/nostr');
 
-    $uploads['path'] = $base_directory . $custom_directory;
-    if (!file_exists($uploads['path'])) {
-        wp_mkdir_p($uploads['path']);
-    }    
-    $uploads['url']  = $base_url . $custom_url;
+        $custom_directory = '/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1);
+        $custom_url = '/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1);
 
-    $uploads['subdir'] = $custom_directory;
-    $uploads['basedir'] = $base_directory;
-    $uploads['baseurl'] = $base_url;
+        $uploads['path'] = $base_directory . $custom_directory;
+        if (!file_exists($uploads['path'])) {
+            wp_mkdir_p($uploads['path']);
+        }    
+        $uploads['url']  = $base_url . $custom_url;
+
+        $uploads['subdir'] = $custom_directory;
+        $uploads['basedir'] = $base_directory;
+        $uploads['baseurl'] = $base_url;
+        return $uploads;
+    }
 
     return $uploads;
 }
