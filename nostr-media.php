@@ -48,7 +48,7 @@ function msp_save_custom_user_profile_fields($user_id) {
     $nostrNpub = $_POST['nostrNpub'];
 
     // Add validation for the nostrNpub field
-    if (substr($nostrNpub, 0, 5) !== 'npub1') {
+    if ((substr($nostrNpub, 0, 5) !== 'npub1') && ($nostrNpub !== "")) {
         wp_die('Error: Key should start with "npub1". <a href="javascript:history.back()">Go back</a>.');
         return ["valid" => false];
     }
