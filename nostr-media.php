@@ -380,6 +380,17 @@ register_activation_hook(__FILE__, 'my_plugin_activation_check');
 
 // Admin notice for showing any errors.
 function my_plugin_admin_notices() {
+    // if post_max_size or upload_max_filesize is too low
+    // handle 128M or 128000000
+    $post_max_size = ini_get('post_max_size');
+    $upload_max_filesize = ini_get('upload_max_filesize');
+    $post_max_size_bytes = wp_convert_hr_to_bytes($post_max_size);
+    $upload_max_filesize_bytes = wp_convert_hr_to_bytes($upload_max_filesize);
+
+    if ($post_max_size_bytes < 8000000 || $upload_max_filesize_bytes < 8000000) {
+        printf('<div class="notice notice-error"><p>%1$s</p></div>', esc_html__('Nostr Media Uploads: post_max_size or upload_max_filesize is too low and may cause problems. Please contact your hosting provider or server administrator to increase these values. Recommended: 64M or 128M.'));
+    }
+
     if (!extension_loaded('gmp')) {
         printf('<div class="notice notice-error"><p>%1$s</p></div>', esc_html__('Error! Your server needs the GMP PHP extension enabled to use this plugin.'));
     }
