@@ -63,7 +63,7 @@ function validate_authorization_header() {
     if (isset($headers['Authorization'])) {
 
         if (substr($headers['Authorization'], 0, 6) !== 'Nostr ') {
-            return ["valid" => false];
+            return ["valid" => false, "message" => "Invalid Authorization header."];
         }
 
         // Remove "Nostr " prefix from $headers['Authorization']
@@ -74,7 +74,7 @@ function validate_authorization_header() {
 
         // Verify event signature
         if (!Event::verify($jsonString)) {
-            return ["valid" => false];
+            return ["valid" => false, "message" => "Invalid signature."];
         }
 
         // Decode the JSON string
@@ -84,7 +84,53 @@ function validate_authorization_header() {
 
         // Check that pubkey is 64 characters long
         if (strlen($pubkey) !== 64) {
-            return ["valid" => false];
+            return ["valid" => false, "message" => "Invalid pubkey."];
+        }
+
+        $kind = $json["kind"];
+        // Check that kind is 27235
+        if ($kind !== 27235) {
+            return ["valid" => false, "message" => "Invalid kind."];
+        }
+
+        $created_at = $json["created_at"];
+        // Check if created_at is less then 5 minutes ago
+        if (time() - $created_at > 300) {
+            return ["valid" => false, "message" => "Kind 27235 Event is too old."];
+        }
+        
+        // TODO: Doesn't work:
+        // There is no way to get a body hash in PHP because php://input is not available with enctype="multipart/form-data" 🤷‍♂️🤷‍♂️🤷‍♂️
+        // Get the body hash
+        // $bodyHash = hash('sha256', file_get_contents('php://input'));        
+        
+        // check if hash matches payload tag
+        $didHaveValidU = false;
+        // $didHaveValidPayload = false; 🤷‍♂️🤷‍♂️🤷‍♂️
+        foreach (array_values($json["tags"]) as $tag => $value) {
+            switch ($value[0]) {
+                case "u":
+                    $base_url = get_site_url();
+                    $api_url = $base_url . '/wp-json/nostrmedia/v1/upload/';
+                    // error_log("Checking u {$value[1]} against api url {$api_url}");
+                    if ($value[1] != $api_url) {
+                        return ["valid" => false, "message" => "Invalid \"u\" tag"];
+                    }
+                    $didHaveValidU = true;
+                    break;
+                // case "payload": 🤷‍♂️🤷‍♂️🤷‍♂️
+                //     error_log("Checking payload {$value[1]} against body hash {$bodyHash}");
+                //     if ($value[1] != $bodyHash) {
+                //         return ["valid" => false, "message" => "Invalid \"payload\" tag"];
+                //     }
+                //     $didHaveValidPayload = true;
+                //     break;
+            }            
+        }    
+        
+        if (!$didHaveValidU) {
+        // if (!$didHaveValidU || !$didHaveValidPayload) { 🤷‍♂️🤷‍♂️🤷‍♂️
+            return ["valid" => false, "message" => "Missing \"u\" or \"payload\" tag"];
         }
         
         // convert pubkey to npub
@@ -101,12 +147,13 @@ function validate_authorization_header() {
         if (!empty($users)) {
             return [
                 "valid" => true,
-                "json" => $json
+                "json" => $json,
             ];
         }
+        return ["valid" => false, "message" => "No user found with that npub."];
     }
 
-    return ["valid" => false];
+    return ["valid" => false, "message" => "Missing Authorization header."];
 }
 
 
@@ -130,7 +177,7 @@ function handle_image_upload() {
     
     $isValid = validate_authorization_header();
 
-    if($isValid["valid"]) {
+    if ($isValid["valid"]) {
         if (!function_exists('wp_handle_upload')) {
             require_once(ABSPATH . 'wp-admin/includes/file.php');
         }
@@ -265,7 +312,8 @@ function handle_image_upload() {
             return new WP_Error('upload_error', $movefile['error'], array('status' => 500));
         }
     } else {
-        return new WP_Error('authorization_error', 'Invalid Authorization header.', array('status' => 401));
+        $message = $isValid["message"] ?? "Invalid Authorization header.";
+        return new WP_Error('authorization_error', $message, array('status' => 401));
     }
 }
 
@@ -364,6 +412,7 @@ add_action('parse_request', 'nostr_custom_parse_request');
 
 // Upon plugin activation, check if ext-gmp is enabled.
 function my_plugin_activation_check() {
+
     if (!extension_loaded('gmp')) {
         deactivate_plugins(plugin_basename(__FILE__)); // Deactivate our plugin.
         wp_die('Error! Your server needs the GMP PHP extension enabled to use this plugin. Please contact your hosting provider or server administrator to enable the GMP extension.');
@@ -398,6 +447,8 @@ function my_plugin_admin_notices() {
     if (!extension_loaded('xml')) {
         printf('<div class="notice notice-error"><p>%1$s</p></div>', esc_html__('Error! Your server needs the XML PHP extension enabled to use this plugin.'));
     }
+
+    
 }
 add_action('admin_notices', 'my_plugin_admin_notices');
 
