@@ -106,9 +106,18 @@ function validate_authorization_header() {
         
         // check if hash matches payload tag
         $didHaveValidU = false;
+        $didHaveValidMethod = false;
         // $didHaveValidPayload = false; 🤷‍♂️🤷‍♂️🤷‍♂️
         foreach (array_values($json["tags"]) as $tag => $value) {
             switch ($value[0]) {
+                case "method":
+                    if ($value[1] == "POST") {
+                        $didHaveValidMethod = true;    
+                    }
+                    else {
+                        return ["valid" => false, "message" => "Invalid \"method\" tag"];
+                    }
+                    break;
                 case "u":
                     $base_url = get_site_url();
                     $api_url = $base_url . '/wp-json/nostrmedia/v1/upload/';
@@ -128,8 +137,8 @@ function validate_authorization_header() {
             }            
         }    
         
-        if (!$didHaveValidU) {
-        // if (!$didHaveValidU || !$didHaveValidPayload) { 🤷‍♂️🤷‍♂️🤷‍♂️
+        if (!$didHaveValidU || !$didHaveValidMethod) {
+        // if (!$didHaveValidU || !$didHaveValidMethod || !$didHaveValidPayload) { 🤷‍♂️🤷‍♂️🤷‍♂️
             return ["valid" => false, "message" => "Missing \"u\" or \"payload\" tag"];
         }
         
