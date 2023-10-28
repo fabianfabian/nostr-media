@@ -16,10 +16,10 @@ use swentel\nostr\Event\Event;
 use swentel\nostr\Key\Key;
 
 // Add the custom field to the profile page
-add_action('show_user_profile', 'msp_add_custom_user_profile_fields');
-add_action('edit_user_profile', 'msp_add_custom_user_profile_fields');
+add_action('show_user_profile', 'nmu_add_custom_user_profile_fields');
+add_action('edit_user_profile', 'nmu_add_custom_user_profile_fields');
 
-function msp_add_custom_user_profile_fields($user) {
+function nmu_add_custom_user_profile_fields($user) {
     ?>
     <h3>Nostr Media</h3>
     <table class="form-table">
@@ -37,10 +37,10 @@ function msp_add_custom_user_profile_fields($user) {
 }
 
 // Save the value of the custom field
-add_action('personal_options_update', 'msp_save_custom_user_profile_fields');
-add_action('edit_user_profile_update', 'msp_save_custom_user_profile_fields');
+add_action('personal_options_update', 'nmu_save_custom_user_profile_fields');
+add_action('edit_user_profile_update', 'nmu_save_custom_user_profile_fields');
 
-function msp_save_custom_user_profile_fields($user_id) {
+function nmu_save_custom_user_profile_fields($user_id) {
     if (!current_user_can('edit_user', $user_id)) {
         return ["valid" => false];
     }
@@ -57,7 +57,7 @@ function msp_save_custom_user_profile_fields($user_id) {
 }
 
 // Check if the Authorization header matches valid NIP98 HTTP Auth 
-function validate_authorization_header() {
+function nmu_validate_authorization_header() {
     $headers = getallheaders();
 
     if (isset($headers['Authorization'])) {
@@ -170,21 +170,21 @@ function validate_authorization_header() {
 add_action('rest_api_init', function() {
     register_rest_route('nostrmedia/v1', '/upload/', array(
         'methods' => 'POST',
-        'callback' => 'handle_image_upload',
+        'callback' => 'nmu_handle_image_upload',
     ));
 });
 
 
 // Disable default image sizes
-function msp_disable_default_image_sizes($sizes) {
+function nmu_disable_default_image_sizes($sizes) {
     return [];
 }
 
-function handle_image_upload() {
+function nmu_handle_image_upload() {
     $base_directory = WP_CONTENT_DIR . '/uploads';
     $base_url = content_url('/uploads');
     
-    $isValid = validate_authorization_header();
+    $isValid = nmu_validate_authorization_header();
 
     if ($isValid["valid"]) {
         if (!function_exists('wp_handle_upload')) {
@@ -210,7 +210,7 @@ function handle_image_upload() {
         // will list: <scaled hash>.ext and in the detail it have a link to <original hash>.ext
 
         if ($movefile && !isset($movefile['error'])) {
-            add_filter('intermediate_image_sizes_advanced', 'msp_disable_default_image_sizes');
+            add_filter('intermediate_image_sizes_advanced', 'nmu_disable_default_image_sizes');
         
             // Insert the file into the media library
             require_once(ABSPATH . 'wp-admin/includes/image.php');
@@ -329,7 +329,7 @@ function handle_image_upload() {
 
 
 // show file hashes (ox and x) in the Media tab
-function msp_add_file_hash_to_media_library($form_fields, $post) {
+function nmu_add_file_hash_to_media_library($form_fields, $post) {
     $meta = get_post_meta($post->ID, '_wp_attachment_metadata', true);
     $original_file_hash = $meta['original_file_hash'];
 
@@ -358,7 +358,7 @@ function msp_add_file_hash_to_media_library($form_fields, $post) {
     return $form_fields;
 }
 
-add_filter('attachment_fields_to_edit', 'msp_add_file_hash_to_media_library', 10, 2);
+add_filter('attachment_fields_to_edit', 'nmu_add_file_hash_to_media_library', 10, 2);
 
 
 
@@ -420,7 +420,7 @@ add_action('parse_request', 'nostr_custom_parse_request');
 
 
 // Upon plugin activation, check if ext-gmp is enabled.
-function my_plugin_activation_check() {
+function nmu_plugin_activation_check() {
 
     if (!extension_loaded('gmp')) {
         deactivate_plugins(plugin_basename(__FILE__)); // Deactivate our plugin.
@@ -434,10 +434,10 @@ function my_plugin_activation_check() {
 
     
 }
-register_activation_hook(__FILE__, 'my_plugin_activation_check');
+register_activation_hook(__FILE__, 'nmu_plugin_activation_check');
 
 // Admin notice for showing any errors.
-function my_plugin_admin_notices() {
+function nmu_plugin_admin_notices() {
     // if post_max_size or upload_max_filesize is too low
     // handle 128M or 128000000
     $post_max_size = ini_get('post_max_size');
@@ -459,13 +459,13 @@ function my_plugin_admin_notices() {
 
     
 }
-add_action('admin_notices', 'my_plugin_admin_notices');
+add_action('admin_notices', 'nmu_plugin_admin_notices');
 
 // We need to store the files by hash instead of WP default YYYY/MM/... so we can check if we 
 // already have a file and return it instead of processing it again.
 // We store in /a/b/hash.ext where /a/b/ is first 2 letters of the hash, so folder browsing does not become slow with too many files in one folder.
 
-function custom_upload_dir($uploads) {
+function nmu_custom_upload_dir($uploads) {
     // Check if we are in the specific REST route
     $current_route = $_SERVER['REQUEST_URI'] ?? '';
 
@@ -495,7 +495,7 @@ function custom_upload_dir($uploads) {
     return $uploads;
 }
 
-add_filter('upload_dir', 'custom_upload_dir');
+add_filter('upload_dir', 'nmu_custom_upload_dir');
 
 register_deactivation_hook( __FILE__, 'nmu_plugin_deactivate' );
 
