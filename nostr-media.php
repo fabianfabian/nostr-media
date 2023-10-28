@@ -63,6 +63,9 @@ function nmu_validate_authorization_header() {
     if (isset($headers['Authorization'])) {
 
         if (substr($headers['Authorization'], 0, 6) !== 'Nostr ') {
+            if (WP_DEBUG) {
+                error_log("Invalid Authorization header: {$headers['Authorization']}");
+            }
             return ["valid" => false, "message" => "Invalid Authorization header."];
         }
 
@@ -74,6 +77,9 @@ function nmu_validate_authorization_header() {
 
         // Verify event signature
         if (!Event::verify($jsonString)) {
+            if (WP_DEBUG) {
+                error_log("Invalid signature: {$jsonString}");
+            }
             return ["valid" => false, "message" => "Invalid signature."];
         }
 
@@ -84,18 +90,27 @@ function nmu_validate_authorization_header() {
 
         // Check that pubkey is 64 characters long
         if (strlen($pubkey) !== 64) {
+            if (WP_DEBUG) {
+                error_log("Invalid pubkey: {$pubkey}");
+            }
             return ["valid" => false, "message" => "Invalid pubkey."];
         }
 
         $kind = $json["kind"];
         // Check that kind is 27235
         if ($kind !== 27235) {
+            if (WP_DEBUG) {
+                error_log("Wrong kind: {$kind}");
+            }
             return ["valid" => false, "message" => "Invalid kind."];
         }
 
         $created_at = $json["created_at"];
         // Check if created_at is less then 5 minutes ago
         if (time() - $created_at > 300) {
+            if (WP_DEBUG) {
+                error_log("Kind 27235 Event is too old, created_at: {$created_at}");
+            }
             return ["valid" => false, "message" => "Kind 27235 Event is too old."];
         }
         
@@ -121,7 +136,9 @@ function nmu_validate_authorization_header() {
                 case "u":
                     $base_url = get_site_url();
                     $api_url = $base_url . '/wp-json/nostrmedia/v1/upload/';
-                    // error_log("Checking u {$value[1]} against api url {$api_url}");
+                    if (WP_DEBUG) {
+                        error_log("Checking u {$value[1]} against api url {$api_url}");
+                    }
                     if ($value[1] != $api_url) {
                         return ["valid" => false, "message" => "Invalid \"u\" tag"];
                     }
@@ -139,6 +156,9 @@ function nmu_validate_authorization_header() {
         
         if (!$didHaveValidU || !$didHaveValidMethod) {
         // if (!$didHaveValidU || !$didHaveValidMethod || !$didHaveValidPayload) { 🤷‍♂️🤷‍♂️🤷‍♂️
+            if (WP_DEBUG) {
+                error_log("Missing \"u\" or \"payload\" tag");
+            }
             return ["valid" => false, "message" => "Missing \"u\" or \"payload\" tag"];
         }
         
@@ -158,6 +178,9 @@ function nmu_validate_authorization_header() {
                 "valid" => true,
                 "json" => $json,
             ];
+        }
+        if (WP_DEBUG) {
+            error_log("No user found with that npub: {$npub}");
         }
         return ["valid" => false, "message" => "No user found with that npub."];
     }
