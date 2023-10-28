@@ -496,3 +496,20 @@ function custom_upload_dir($uploads) {
 }
 
 add_filter('upload_dir', 'custom_upload_dir');
+
+register_deactivation_hook( __FILE__, 'nmu_plugin_deactivate' );
+
+function nmu_plugin_deactivate() {
+    flush_rewrite_rules();
+}
+
+register_activation_hook( __FILE__, 'nmu_plugin_activate' );
+
+function nmu_plugin_activate() {
+    add_action('wp_loaded', 'nmu_flush_rules');
+}
+
+function nmu_flush_rules() {
+    flush_rewrite_rules();
+}
+
