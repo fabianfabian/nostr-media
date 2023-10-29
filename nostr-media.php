@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Nostr Media Uploads
  * Description: Host the images you post on nostr on your own WordPress installation
- * Version: 0.6
+ * Version: 0.7
  * Author: Fabian Lachman
  */
 
