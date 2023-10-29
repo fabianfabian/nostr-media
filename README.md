@@ -2,8 +2,8 @@
 
 Host images and media you post from your nostr client in your own WordPress installation using this plug-in.
 
-## Warning
-This is a very early rough initial version, just the minimal needed to get things working. Needs clean up and refactoring, extra security check, and doesn't support all the features of a fully fledged nostr backend, for that look at solutions like: https://github.com/quentintaranpino/nostrcheck-api-ts 
+## Notice
+This is an early version, just the minimal needed to get things working. It doesn't support all the features of a fully fledged nostr backend, for that look at solutions like: https://github.com/quentintaranpino/nostrcheck-api-ts 
 
 ## Features
 - Upload media using HTTP Auth (NIP-98) and HTTP File Storage Integration (NIP-96)
