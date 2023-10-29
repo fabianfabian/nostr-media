@@ -536,3 +536,50 @@ function nmu_flush_rules() {
     flush_rewrite_rules();
 }
 
+
+// On on the media page when opening an image it has the wrong folder for the original image.
+// Because we're storing the scaled images as uploads/nostr/s/c/scaled-hash.ext and the original as uploads/nostr/o/r/original-hash.ext, 
+// but the link in the media page goes to uploads/nostr/s/c/original-hash.ext  
+// it seems to be using the scaled prefix, probably expecting the original and all resized versions to be in the same folder.
+
+// So we need to change the link to the original image to the correct folder.
+
+add_filter('wp_get_original_image_url', 'nmu_get_original_image_url', 10, 2);
+
+function nmu_get_original_image_url($original_image_url, $post_id) {
+    // $original_image_url is http://.../wp-content/uploads/nostr/0/5/9e5aefbc4384aef20d9c2675ccc64c263e3eb8dcacecd56308a4371a515221d6.jpg
+    // if original_file_hash is part of the path, we need to replace the prefix with the original prefix
+    // so ../0/5/9e..  become ../9/e/9e..
+
+    // if the original url does not contain "/nostr/" then it's not a NIP-96 image, so return the original url
+    if (strpos($original_image_url, '/nostr/') === false) {
+        return $original_image_url;
+    }
+
+    // Fetch the metadata for this attachment.
+    $metadata = wp_get_attachment_metadata($post_id);
+
+    // If there is no metadata, return the original image URL.
+    if (!$metadata) {
+        return $original_image_url;
+    }
+
+    // If there is no original_file_hash in the metadata, return the original image URL.
+    if (!isset($metadata['original_file_hash'])) {
+        return $original_image_url;
+    }
+
+    // Get the original_file_hash from the metadata.
+    $original_file_hash = $metadata['original_file_hash'];
+
+    // Get the original prefix from the original_file_hash.
+    $original_prefix = substr($original_file_hash, 0, 1) . '/' . substr($original_file_hash, 1, 1);
+
+    $extension = pathinfo($original_image_url, PATHINFO_EXTENSION);
+
+    // Replace the prefix in the original_image_url with the original prefix.
+    $original_image_url = content_url('/uploads') . '/nostr/' . $original_prefix . '/' . $original_file_hash . '.' . $extension;
+    
+    // Return the original_image_url.
+    return $original_image_url;
+}
