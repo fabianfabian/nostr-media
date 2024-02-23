@@ -177,6 +177,7 @@ function nmu_validate_authorization_header() {
             return [
                 "valid" => true,
                 "json" => $json,
+                "userId" => $users[0]->ID
             ];
         }
         if (WP_DEBUG) {
@@ -250,7 +251,8 @@ function nmu_handle_image_upload() {
                 'post_mime_type' => $filetype['type'],
                 'post_title'     => preg_replace('/\.[^.]+$/', '', basename($movefile['file'])),
                 'post_content'   => '',
-                'post_status'    => 'inherit'
+                'post_status'    => 'inherit',
+                'post_author'    => $isValid["userId"]
             );
         
             $attach_id = wp_insert_attachment($attachment, $new_original_path);
