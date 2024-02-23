@@ -354,16 +354,19 @@ function nmu_handle_image_upload() {
 // show file hashes (ox and x) in the Media tab
 function nmu_add_file_hash_to_media_library($form_fields, $post) {
     $meta = get_post_meta($post->ID, '_wp_attachment_metadata', true);
-    $original_file_hash = $meta['original_file_hash'];
 
-    if ($original_file_hash) {
-        $form_fields['original_file_hash'] = array(
-            'label' => 'Original hash (ox)',
-            'input' => 'html',
-            'html' => '<input type="text" name="attachments[' . $post->ID . '][original_file_hash]" id="attachments-' . $post->ID . '-original_file_hash" value="' . esc_attr($original_file_hash) . '" readonly>',
-            'value' => esc_attr($original_file_hash),
-            'helps' => 'SHA-256 hash of the original file'
-        );
+    if (isset($meta['original_file_hash'])) {
+        $original_file_hash = $meta['original_file_hash'];
+
+        if ($original_file_hash) {
+            $form_fields['original_file_hash'] = array(
+                'label' => 'Original hash (ox)',
+                'input' => 'html',
+                'html' => '<input type="text" name="attachments[' . $post->ID . '][original_file_hash]" id="attachments-' . $post->ID . '-original_file_hash" value="' . esc_attr($original_file_hash) . '" readonly>',
+                'value' => esc_attr($original_file_hash),
+                'helps' => 'SHA-256 hash of the original file'
+            );
+        }
     }
 
     $scaled_image_hash = isset($meta['scaled_file_hash']) ? $meta['scaled_file_hash'] : null;
