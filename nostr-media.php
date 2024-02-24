@@ -258,6 +258,14 @@ function nmu_handle_image_upload() {
             $attach_id = wp_insert_attachment($attachment, $new_original_path);
             $attach_data = wp_generate_attachment_metadata($attach_id, $new_original_path);
 
+            // Assign default tag (if one is selected on Settings -> Media)
+            $default_tag_id = get_option('nmu_default_tag');
+
+            if (!empty($default_tag_id)) {
+                wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
+            }
+            
+
             unset($attach_data["image_meta"]);
 
             // If there is no scaled version, the scaled path and hash will default back to the original path and hash:
@@ -587,6 +595,7 @@ function nmu_get_original_image_url($original_image_url, $post_id) {
     
     // Return the original_image_url.
     return $original_image_url;
+}
 
 // add tags for media (attachments)
 function nmu_add_tags_for_attachments() {
