@@ -587,4 +587,45 @@ function nmu_get_original_image_url($original_image_url, $post_id) {
     
     // Return the original_image_url.
     return $original_image_url;
+
+// add tags for media (attachments)
+function nmu_add_tags_for_attachments() {
+    register_taxonomy_for_object_type( 'post_tag', 'attachment' );
+}
+add_action( 'init' , 'nmu_add_tags_for_attachments' );
+
+
+// Register a new setting for storing the default tag for media uploads. In Settings -> Media.
+function nmu_add_default_tag_setting() {
+    register_setting('media', 'nmu_default_tag');
+
+    // Add a new settings field for the default tag
+    add_settings_field(
+        'nmu_default_tag', // ID
+        'Tag for Nostr Media Uploads', // Label
+        'nmu_default_tag_field_callback', // Callback
+        'media', // Page
+        'default' // Section
+    );
+}
+add_action('admin_init', 'nmu_add_default_tag_setting');
+
+// Callback function for the settings field
+function nmu_default_tag_field_callback() {
+    $default_tag = get_option('nmu_default_tag');
+    
+    echo '<select name="nmu_default_tag" id="nmu_default_tag">';
+    echo '<option value="">Select tag</option>';
+
+    // Fetch all tags and display them as options
+    $tags = get_terms(array('taxonomy' => 'post_tag', 'hide_empty' => false));
+    foreach ($tags as $tag) {
+        echo sprintf(
+            '<option value="%s" %s>%s</option>',
+            esc_attr($tag->term_id),
+            selected($default_tag, $tag->term_id, false),
+            esc_html($tag->name)
+        );
+    }
+    echo '</select>';
 }
