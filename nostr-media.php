@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Nostr Media Uploads
  * Description: Host the images you post on nostr on your own WordPress installation
- * Version: 0.7
+ * Version: 0.8
  * Author: Fabian Lachman
  */
 
@@ -254,6 +254,7 @@ function nmu_handle_image_upload() {
                 'post_status'    => 'inherit',
                 'post_author'    => $isValid["userId"]
             );
+
         
             $attach_id = wp_insert_attachment($attachment, $new_original_path);
             $attach_data = wp_generate_attachment_metadata($attach_id, $new_original_path);
@@ -264,7 +265,7 @@ function nmu_handle_image_upload() {
             if (!empty($default_tag_id)) {
                 wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
             }
-            
+
 
             unset($attach_data["image_meta"]);
 
