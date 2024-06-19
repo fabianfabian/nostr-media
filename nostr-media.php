@@ -257,100 +257,144 @@ function nmu_handle_image_upload() {
 
         
             $attach_id = wp_insert_attachment($attachment, $new_original_path);
-            $attach_data = wp_generate_attachment_metadata($attach_id, $new_original_path);
+            
+            if ($filetype['type'] != "video/mp4") {
+                $attach_data = wp_generate_attachment_metadata($attach_id, $new_original_path);
 
-            // Assign default tag (if one is selected on Settings -> Media)
-            $default_tag_id = get_option('nmu_default_tag');
-
-            if (!empty($default_tag_id)) {
-                wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
-            }
-
-
-            unset($attach_data["image_meta"]);
-
-            // If there is no scaled version, the scaled path and hash will default back to the original path and hash:
-            $scaled_image_path = $new_original_path;
-            $scaled_image_hash = hash_file('sha256', $base_directory . '/' . $attach_data["file"]);
-            $isScaled = $scaled_image_hash !== $original_hash;
-
-            $scaled_image_filepath = $base_directory . '/' . $attach_data["file"];
-
-            if ($isScaled) {
-                // Move file to new path nostr/s/c/<scaled hash>.ext
-                $extension = pathinfo($attach_data["file"], PATHINFO_EXTENSION);
-                $scaled_path_prefix = substr($scaled_image_hash, 0, 1) . '/' . substr($scaled_image_hash, 1, 1);
-                $new_path = 'nostr/' . $scaled_path_prefix . '/' . $scaled_image_hash . '.' .$extension;
-                
-                // Save the scaled hash to the attachment metadata
-                $attach_data['scaled_file_hash'] = $scaled_image_hash;
-
-                // New path for the scaled image
-                // From: d/0/d0c0db5b65104add337d851725c451ccd8b618bdfc017946b78cca82599a3be6-jpg.webp (original hash)
-                // To: 5/6/56ef04e3a9d61edbc8bfe0314d945bb3dc7a054d53d46b09cd7bbe188809cd36.webp (scaled hash and -scaled or other suffixes removed)
-
-                $new_scaled_image_filepath = $base_directory . '/' . $new_path;
-
-                // If the file doesn't exist check, check if directory exists, and if not, create it
-                if (!file_exists($new_scaled_image_filepath)) { 
-                    $new_scaled_image_dir = dirname($new_scaled_image_filepath);
-                    if (!file_exists($new_scaled_image_dir)) { // create prefix paths if they don't exist
-                        wp_mkdir_p($new_scaled_image_dir);
-                    }   
+                // Assign default tag (if one is selected on Settings -> Media)
+                $default_tag_id = get_option('nmu_default_tag');
+    
+                if (!empty($default_tag_id)) {
+                    wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
                 }
-
-                // Rename the file on the disk
-                if (rename($scaled_image_filepath, $new_scaled_image_filepath)) {
-                    // Update the 'file' key in the $attach_data array
-                    $attach_data['file'] = $new_path;
+    
+    
+                unset($attach_data["image_meta"]);
+    
+                // If there is no scaled version, the scaled path and hash will default back to the original path and hash:
+                $scaled_image_path = $new_original_path;
+                $scaled_image_hash = hash_file('sha256', $base_directory . '/' . $attach_data["file"]);
+                $isScaled = $scaled_image_hash !== $original_hash;
+    
+                $scaled_image_filepath = $base_directory . '/' . $attach_data["file"];
+    
+                if ($isScaled) {
+                    // Move file to new path nostr/s/c/<scaled hash>.ext
+                    $extension = pathinfo($attach_data["file"], PATHINFO_EXTENSION);
+                    $scaled_path_prefix = substr($scaled_image_hash, 0, 1) . '/' . substr($scaled_image_hash, 1, 1);
+                    $new_path = 'nostr/' . $scaled_path_prefix . '/' . $scaled_image_hash . '.' .$extension;
                     
-                    // Update the 'sources' key for all types
-                    if (isset($attach_data['sources'])) {
-                        foreach ($attach_data['sources'] as $type => $source) {
-                            $attach_data['sources'][$type]['file'] = $attach_data['file'];
-                        }
+                    // Save the scaled hash to the attachment metadata
+                    $attach_data['scaled_file_hash'] = $scaled_image_hash;
+    
+                    // New path for the scaled image
+                    // From: d/0/d0c0db5b65104add337d851725c451ccd8b618bdfc017946b78cca82599a3be6-jpg.webp (original hash)
+                    // To: 5/6/56ef04e3a9d61edbc8bfe0314d945bb3dc7a054d53d46b09cd7bbe188809cd36.webp (scaled hash and -scaled or other suffixes removed)
+    
+                    $new_scaled_image_filepath = $base_directory . '/' . $new_path;
+    
+                    // If the file doesn't exist check, check if directory exists, and if not, create it
+                    if (!file_exists($new_scaled_image_filepath)) { 
+                        $new_scaled_image_dir = dirname($new_scaled_image_filepath);
+                        if (!file_exists($new_scaled_image_dir)) { // create prefix paths if they don't exist
+                            wp_mkdir_p($new_scaled_image_dir);
+                        }   
                     }
-                    $scaled_image_path = $new_path;
-                    $scaled_image_filepath = $base_directory . '/' . $attach_data['file'];
-                    // Update the '_wp_attached_file' meta key
-                    update_post_meta($attach_id, '_wp_attached_file', $scaled_image_path);
+    
+                    // Rename the file on the disk
+                    if (rename($scaled_image_filepath, $new_scaled_image_filepath)) {
+                        // Update the 'file' key in the $attach_data array
+                        $attach_data['file'] = $new_path;
+                        
+                        // Update the 'sources' key for all types
+                        if (isset($attach_data['sources'])) {
+                            foreach ($attach_data['sources'] as $type => $source) {
+                                $attach_data['sources'][$type]['file'] = $attach_data['file'];
+                            }
+                        }
+                        $scaled_image_path = $new_path;
+                        $scaled_image_filepath = $base_directory . '/' . $attach_data['file'];
+                        // Update the '_wp_attached_file' meta key
+                        update_post_meta($attach_id, '_wp_attached_file', $scaled_image_path);
+                    }
                 }
-            }
-
-            // Save the original to the attachment metadata
-            $attach_data['original_file_hash'] = $original_hash;
-
-            // Save size and dimensions of the scaled image to the attachment metadata
-            $attach_data['dim'] = getimagesize($scaled_image_filepath);
-            $attach_data['size'] = filesize($scaled_image_filepath);
-        
-            wp_update_attachment_metadata($attach_id, $attach_data);
-        
-            // Get the URL of the newly named scaled image (https://your-domain.com/wp-content/uploads/nostr/s/c/<scaled hash>.ext)
-            $scaled_image_url = $base_url . '/' . $attach_data['file'];
-        
-            $response = array(
-                "status" => "success",
-                "message" => "File uploaded.",
-                "nip94_event" => array(
-                    "pubkey" => $isValid["json"]["pubkey"],
-                    "content" => "",
-                    "id" => "",
-                    "created_at" => $isValid["json"]["created_at"],
-                    "kind" => 1063,
-                    "sig" => "",
-                    "tags" => array(
-                        array("url", $scaled_image_url),
-                        array("m", $movefile['type']),
-                        array("ox", $original_hash),  
-                        array("x", $scaled_image_hash),
-                        array("size", "" . $attach_data['size']),  // Added file size of the scaled image
-                        array("dim", $attach_data['dim'][0] . 'x' . $attach_data['dim'][1])  // Added dimensions of the scaled image
+    
+                // Save the original to the attachment metadata
+                $attach_data['original_file_hash'] = $original_hash;
+    
+                // Save size and dimensions of the scaled image to the attachment metadata
+                $attach_data['dim'] = getimagesize($scaled_image_filepath);
+                $attach_data['size'] = filesize($scaled_image_filepath);
+            
+                wp_update_attachment_metadata($attach_id, $attach_data);
+            
+                // Get the URL of the newly named scaled image (https://your-domain.com/wp-content/uploads/nostr/s/c/<scaled hash>.ext)
+                $scaled_image_url = $base_url . '/' . $attach_data['file'];
+            
+                $response = array(
+                    "status" => "success",
+                    "message" => "File uploaded.",
+                    "nip94_event" => array(
+                        "pubkey" => $isValid["json"]["pubkey"],
+                        "content" => "",
+                        "id" => "",
+                        "created_at" => $isValid["json"]["created_at"],
+                        "kind" => 1063,
+                        "sig" => "",
+                        "tags" => array(
+                            array("url", $scaled_image_url),
+                            array("m", $movefile['type']),
+                            array("ox", $original_hash),  
+                            array("x", $scaled_image_hash),
+                            array("size", "" . $attach_data['size']),  // Added file size of the scaled image
+                            array("dim", $attach_data['dim'][0] . 'x' . $attach_data['dim'][1])  // Added dimensions of the scaled image
+                        )
                     )
-                )
-            );
+                );
+            
+                return new WP_REST_Response($response, 200);
+            }
+            else {
+                // Same as before but all resizing removed
+                $attach_data = [];
+
+                // Assign default tag (if one is selected on Settings -> Media)
+                $default_tag_id = get_option('nmu_default_tag');
+    
+                if (!empty($default_tag_id)) {
+                    wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
+                }
         
-            return new WP_REST_Response($response, 200);
+                // Save the original to the attachment metadata
+                $attach_data['original_file_hash'] = $original_hash;    
+                $attach_data['size'] = filesize($new_original_path);
+            
+                wp_update_attachment_metadata($attach_id, $attach_data);
+
+                $video_url = $base_url . '/nostr/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1) . '/' . $original_hash . '.' . $pathinfo['extension'];
+            
+                $response = array(
+                    "status" => "success",
+                    "message" => "File uploaded.",
+                    "nip94_event" => array(
+                        "pubkey" => $isValid["json"]["pubkey"],
+                        "content" => "",
+                        "id" => "",
+                        "created_at" => $isValid["json"]["created_at"],
+                        "kind" => 1063,
+                        "sig" => "",
+                        "tags" => array(
+                            array("url", $video_url),
+                            array("m", $movefile['type']),
+                            array("ox", $original_hash),  
+                            array("x", $original_hash),
+                            array("size", "" . $attach_data['size']) 
+                        )
+                    )
+                );
+            
+                return new WP_REST_Response($response, 200);
+            }
         } else {
             return new WP_Error('upload_error', $movefile['error'], array('status' => 500));
         }
