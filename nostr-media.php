@@ -215,10 +215,27 @@ function nmu_handle_image_upload() {
             require_once(ABSPATH . 'wp-admin/includes/file.php');
         }
 
-        $uploadedfile = $_FILES['mediafile'];
+        $mediafile_paramname = isset($_FILES['mediafile']) ? "mediafile" : "file";
+
+        $uploadedfile = [];
         global $original_hash;
-        $original_hash = hash_file('sha256', $_FILES['mediafile']['tmp_name']);
-        
+
+        // var_dump($_FILES[$mediafile_paramname]['tmp_name']);
+
+        if (is_array($_FILES[$mediafile_paramname]['tmp_name'])) {
+            $uploadedfile = array(
+                'name' => $_FILES[$mediafile_paramname]['name'][0],
+                'type' => $_FILES[$mediafile_paramname]['type'][0],
+                'tmp_name' => $_FILES[$mediafile_paramname]['tmp_name'][0],
+                'error' => $_FILES[$mediafile_paramname]['error'][0],
+                'size' => $_FILES[$mediafile_paramname]['size'][0]
+            );
+            $original_hash = hash_file('sha256', $_FILES[$mediafile_paramname]['tmp_name'][0]);
+        }
+        else {
+            $uploadedfile = $_FILES[$mediafile_paramname];
+            $original_hash = hash_file('sha256', $_FILES[$mediafile_paramname]['tmp_name']);
+        }
 
         $upload_overrides = array('test_form' => false);
         $movefile = wp_handle_upload($uploadedfile, $upload_overrides);
