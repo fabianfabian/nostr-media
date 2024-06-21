@@ -700,3 +700,20 @@ function nmu_default_tag_field_callback() {
     }
     echo '</select>';
 }
+
+// Allow other origins on NIP-96 paths so other browser clients can make requests
+function add_cors_http_header() {
+    // Define the paths where CORS headers should be applied
+    $allowed_paths = ['/wp-json/nostrmedia/v1/upload/', '/.well-known/nostr/nip96.json']; 
+
+    // Get the requested URI
+    $request_uri = $_SERVER['REQUEST_URI'];
+
+    // Check if the origin is allowed and the path matches the allowed paths
+    if (in_array(parse_url($request_uri, PHP_URL_PATH), $allowed_paths)) {
+        header("Access-Control-Allow-Origin: *");
+        header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+        header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization");
+    }
+}
+add_action( 'init', 'add_cors_http_header' );
