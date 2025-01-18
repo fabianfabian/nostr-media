@@ -340,7 +340,7 @@ function nmu_handle_image_upload() {
                 $attach_data['original_file_hash'] = $original_hash;
     
                 // Save size and dimensions of the scaled image to the attachment metadata
-                $attach_data['dim'] = getimagesize($scaled_image_filepath);
+                $attach_data['dim'] = wp_getimagesize($scaled_image_filepath);
                 $attach_data['size'] = filesize($scaled_image_filepath);
             
                 wp_update_attachment_metadata($attach_id, $attach_data);
