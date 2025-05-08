@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Nostr Media Uploads
  * Description: Host the images you post on nostr on your own WordPress installation
- * Version: 0.11
+ * Version: 0.12
  * Author: Fabian Lachman
  */
 
@@ -98,92 +98,164 @@ function nmu_validate_authorization_header() {
 
         $kind = $json["kind"];
         // Check that kind is 27235
-        if ($kind !== 27235) {
+        if ($kind === 27235) { // nip96 logic
+            $created_at = $json["created_at"];
+            // Check if created_at is less then 5 minutes ago
+            if (time() - $created_at > 300) {
+                if (WP_DEBUG) {
+                    error_log("Kind 27235 Event is too old, created_at: {$created_at}");
+                }
+                return ["valid" => false, "message" => "Kind 27235 Event is too old."];
+            }
+            
+            // TODO: Doesn't work:
+            // There is no way to get a body hash in PHP because php://input is not available with enctype="multipart/form-data" 🤷‍♂️🤷‍♂️🤷‍♂️
+            // Get the body hash
+            // $bodyHash = hash('sha256', file_get_contents('php://input'));        
+            
+            // check if hash matches payload tag
+            $didHaveValidU = false;
+            $didHaveValidMethod = false;
+            // $didHaveValidPayload = false; 🤷‍♂️🤷‍♂️🤷‍♂️
+            foreach (array_values($json["tags"]) as $tag => $value) {
+                switch ($value[0]) {
+                    case "method":
+                        if ($value[1] == "POST") {
+                            $didHaveValidMethod = true;    
+                        }
+                        else {
+                            return ["valid" => false, "message" => "Invalid \"method\" tag"];
+                        }
+                        break;
+                    case "u":
+                        $base_url = get_site_url();
+                        $api_url = $base_url . '/wp-json/nostrmedia/v1/upload/';
+                        if (WP_DEBUG) {
+                            error_log("Checking u {$value[1]} against api url {$api_url}");
+                        }
+                        if ($value[1] != $api_url) {
+                            return ["valid" => false, "message" => "Invalid \"u\" tag"];
+                        }
+                        $didHaveValidU = true;
+                        break;
+                    // case "payload": 🤷‍♂️🤷‍♂️🤷‍♂️
+                    //     error_log("Checking payload {$value[1]} against body hash {$bodyHash}");
+                    //     if ($value[1] != $bodyHash) {
+                    //         return ["valid" => false, "message" => "Invalid \"payload\" tag"];
+                    //     }
+                    //     $didHaveValidPayload = true;
+                    //     break;
+                }            
+            }    
+            
+            if (!$didHaveValidU || !$didHaveValidMethod) {
+            // if (!$didHaveValidU || !$didHaveValidMethod || !$didHaveValidPayload) { 🤷‍♂️🤷‍♂️🤷‍♂️
+                if (WP_DEBUG) {
+                    error_log("Missing \"u\" or \"payload\" tag");
+                }
+                return ["valid" => false, "message" => "Missing \"u\" or \"payload\" tag"];
+            }
+            
+            // convert pubkey to npub
+            $keys = new Key();
+            $npub = $keys->convertPublicKeyToBech32($pubkey);
+
+            // Check if we have a WordPress user with that npub
+            $users = get_users(array(
+                'meta_key' => 'nostrNpub',
+                'meta_value' =>  $npub,
+                'number' => 1,
+            ));
+
+            if (!empty($users)) {
+                return [
+                    "valid" => true,
+                    "json" => $json,
+                    "userId" => $users[0]->ID
+                ];
+            }
+            if (WP_DEBUG) {
+                error_log("No user found with that npub: {$npub}");
+            }
+            return ["valid" => false, "message" => "No user found with that npub."];
+        }
+        else if ($kind === 24242) { // blossom logic
+            $created_at = $json["created_at"];
+            // Check if created_at is not in the future (add 2 minutes to account for bla)
+            if ($created_at > time() + 120) {
+                if (WP_DEBUG) {
+                    error_log("Kind 24242 Event is in the future, created_at: {$created_at}");
+                }
+                return ["valid" => false, "message" => "Kind 24242 Event is in the future."];
+            }
+            
+            // Get the body hash
+            $bodyHash = hash('sha256', file_get_contents('php://input'));        
+            
+            // check if hash matches payload tag
+            $isNotExpired = false;
+            $hasUploadTag = false;
+            $hasMatchingHashTag = false;
+            foreach (array_values($json["tags"]) as $tag => $value) {
+                switch ($value[0]) {
+                    case "expiration":
+                        // check if expiration is in the future
+                        if ($value[1] > time() - 120) {
+                            $isNotExpired = true;
+                        }
+                        break;
+                    case "t":
+                        if ($value[1] == "upload") {
+                            $hasUploadTag = true;    
+                        }
+                        break;
+                    case "x":
+                        if ($value[1] == $bodyHash) {
+                            $hasMatchingHashTag = true;
+                        }
+                        if (WP_DEBUG) {
+                            error_log("Checking x {$value[1]} against bodyHash {$bodyHash}");
+                        }
+                        break;
+                }            
+            }    
+
+            if (!$isNotExpired || !$hasUploadTag || !$hasMatchingHashTag) {
+                if (WP_DEBUG) {
+                    error_log("Invalid auth header");
+                }
+                return ["valid" => false, "message" => "Invalid auth header"];
+            }
+            
+            // convert pubkey to npub
+            $keys = new Key();
+            $npub = $keys->convertPublicKeyToBech32($pubkey);
+
+            // Check if we have a WordPress user with that npub
+            $users = get_users(array(
+                'meta_key' => 'nostrNpub',
+                'meta_value' =>  $npub,
+                'number' => 1,
+            ));
+
+            if (!empty($users)) {
+                return [
+                    "valid" => true,
+                    "json" => $json,
+                    "userId" => $users[0]->ID
+                ];
+            }
+            if (WP_DEBUG) {
+                error_log("No user found with that npub: {$npub}");
+            }
+            return ["valid" => false, "message" => "No user found with that npub."];
+        }
+        else {
             if (WP_DEBUG) {
                 error_log("Wrong kind: {$kind}");
             }
             return ["valid" => false, "message" => "Invalid kind."];
         }
-
-        $created_at = $json["created_at"];
-        // Check if created_at is less then 5 minutes ago
-        if (time() - $created_at > 300) {
-            if (WP_DEBUG) {
-                error_log("Kind 27235 Event is too old, created_at: {$created_at}");
-            }
-            return ["valid" => false, "message" => "Kind 27235 Event is too old."];
-        }
-        
-        // TODO: Doesn't work:
-        // There is no way to get a body hash in PHP because php://input is not available with enctype="multipart/form-data" 🤷‍♂️🤷‍♂️🤷‍♂️
-        // Get the body hash
-        // $bodyHash = hash('sha256', file_get_contents('php://input'));        
-        
-        // check if hash matches payload tag
-        $didHaveValidU = false;
-        $didHaveValidMethod = false;
-        // $didHaveValidPayload = false; 🤷‍♂️🤷‍♂️🤷‍♂️
-        foreach (array_values($json["tags"]) as $tag => $value) {
-            switch ($value[0]) {
-                case "method":
-                    if ($value[1] == "POST") {
-                        $didHaveValidMethod = true;    
-                    }
-                    else {
-                        return ["valid" => false, "message" => "Invalid \"method\" tag"];
-                    }
-                    break;
-                case "u":
-                    $base_url = get_site_url();
-                    $api_url = $base_url . '/wp-json/nostrmedia/v1/upload/';
-                    if (WP_DEBUG) {
-                        error_log("Checking u {$value[1]} against api url {$api_url}");
-                    }
-                    if ($value[1] != $api_url) {
-                        return ["valid" => false, "message" => "Invalid \"u\" tag"];
-                    }
-                    $didHaveValidU = true;
-                    break;
-                // case "payload": 🤷‍♂️🤷‍♂️🤷‍♂️
-                //     error_log("Checking payload {$value[1]} against body hash {$bodyHash}");
-                //     if ($value[1] != $bodyHash) {
-                //         return ["valid" => false, "message" => "Invalid \"payload\" tag"];
-                //     }
-                //     $didHaveValidPayload = true;
-                //     break;
-            }            
-        }    
-        
-        if (!$didHaveValidU || !$didHaveValidMethod) {
-        // if (!$didHaveValidU || !$didHaveValidMethod || !$didHaveValidPayload) { 🤷‍♂️🤷‍♂️🤷‍♂️
-            if (WP_DEBUG) {
-                error_log("Missing \"u\" or \"payload\" tag");
-            }
-            return ["valid" => false, "message" => "Missing \"u\" or \"payload\" tag"];
-        }
-        
-        // convert pubkey to npub
-        $keys = new Key();
-        $npub = $keys->convertPublicKeyToBech32($pubkey);
-
-        // Check if we have a WordPress user with that npub
-        $users = get_users(array(
-            'meta_key' => 'nostrNpub',
-            'meta_value' =>  $npub,
-            'number' => 1,
-        ));
-
-        if (!empty($users)) {
-            return [
-                "valid" => true,
-                "json" => $json,
-                "userId" => $users[0]->ID
-            ];
-        }
-        if (WP_DEBUG) {
-            error_log("No user found with that npub: {$npub}");
-        }
-        return ["valid" => false, "message" => "No user found with that npub."];
     }
 
     return ["valid" => false, "message" => "Missing Authorization header."];
@@ -204,6 +276,7 @@ function nmu_disable_default_image_sizes($sizes) {
     return [];
 }
 
+// Old nip96 method
 function nmu_handle_image_upload() {
     $base_directory = WP_CONTENT_DIR . '/uploads';
     $base_url = content_url('/uploads');
@@ -239,6 +312,9 @@ function nmu_handle_image_upload() {
 
         $upload_overrides = array('test_form' => false);
         $movefile = wp_handle_upload($uploadedfile, $upload_overrides);
+
+        // Detect MIME type
+        $mime_type = mime_content_type($movefile['file']);
         
 
         // WP saves an image and then creates scaled version of it with suffix.
@@ -252,166 +328,12 @@ function nmu_handle_image_upload() {
 
         if ($movefile && !isset($movefile['error'])) {
             add_filter('intermediate_image_sizes_advanced', 'nmu_disable_default_image_sizes');
-        
-            // Insert the file into the media library
-            require_once(ABSPATH . 'wp-admin/includes/image.php');
-        
-            $filetype = wp_check_filetype(basename($movefile['file']), null);
-
-            // Save uploaded file to <hash>.ext
-            $pathinfo = pathinfo($movefile['file']);
-            $new_original_path = $pathinfo['dirname'] . '/' . $original_hash . '.' . $pathinfo['extension'];
-            rename($movefile['file'], $new_original_path);
-        
-            $attachment = array(
-                'guid'           => $new_original_path,
-                'post_mime_type' => $filetype['type'],
-                'post_title'     => preg_replace('/\.[^.]+$/', '', basename($movefile['file'])),
-                'post_content'   => '',
-                'post_status'    => 'inherit',
-                'post_author'    => $isValid["userId"]
-            );
-
-        
-            $attach_id = wp_insert_attachment($attachment, $new_original_path);
-            
-            if (strpos($filetype['type'], "video/") !== 0) { // should be image types here
-                $attach_data = wp_generate_attachment_metadata($attach_id, $new_original_path);
-
-                // Assign default tag (if one is selected on Settings -> Media)
-                $default_tag_id = get_option('nmu_default_tag');
-    
-                if (!empty($default_tag_id)) {
-                    wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
-                }
-    
-    
-                unset($attach_data["image_meta"]);
-    
-                // If there is no scaled version, the scaled path and hash will default back to the original path and hash:
-                $scaled_image_path = $new_original_path;
-                $scaled_image_hash = hash_file('sha256', $base_directory . '/' . $attach_data["file"]);
-                $isScaled = $scaled_image_hash !== $original_hash;
-    
-                $scaled_image_filepath = $base_directory . '/' . $attach_data["file"];
-    
-                if ($isScaled) {
-                    // Move file to new path nostr/s/c/<scaled hash>.ext
-                    $extension = pathinfo($attach_data["file"], PATHINFO_EXTENSION);
-                    $scaled_path_prefix = substr($scaled_image_hash, 0, 1) . '/' . substr($scaled_image_hash, 1, 1);
-                    $new_path = 'nostr/' . $scaled_path_prefix . '/' . $scaled_image_hash . '.' .$extension;
                     
-                    // Save the scaled hash to the attachment metadata
-                    $attach_data['scaled_file_hash'] = $scaled_image_hash;
-    
-                    // New path for the scaled image
-                    // From: d/0/d0c0db5b65104add337d851725c451ccd8b618bdfc017946b78cca82599a3be6-jpg.webp (original hash)
-                    // To: 5/6/56ef04e3a9d61edbc8bfe0314d945bb3dc7a054d53d46b09cd7bbe188809cd36.webp (scaled hash and -scaled or other suffixes removed)
-    
-                    $new_scaled_image_filepath = $base_directory . '/' . $new_path;
-    
-                    // If the file doesn't exist check, check if directory exists, and if not, create it
-                    if (!file_exists($new_scaled_image_filepath)) { 
-                        $new_scaled_image_dir = dirname($new_scaled_image_filepath);
-                        if (!file_exists($new_scaled_image_dir)) { // create prefix paths if they don't exist
-                            wp_mkdir_p($new_scaled_image_dir);
-                        }   
-                    }
-    
-                    // Rename the file on the disk
-                    if (rename($scaled_image_filepath, $new_scaled_image_filepath)) {
-                        // Update the 'file' key in the $attach_data array
-                        $attach_data['file'] = $new_path;
-                        
-                        // Update the 'sources' key for all types
-                        if (isset($attach_data['sources'])) {
-                            foreach ($attach_data['sources'] as $type => $source) {
-                                $attach_data['sources'][$type]['file'] = $attach_data['file'];
-                            }
-                        }
-                        $scaled_image_path = $new_path;
-                        $scaled_image_filepath = $base_directory . '/' . $attach_data['file'];
-                        // Update the '_wp_attached_file' meta key
-                        update_post_meta($attach_id, '_wp_attached_file', $scaled_image_path);
-                    }
-                }
-    
-                // Save the original to the attachment metadata
-                $attach_data['original_file_hash'] = $original_hash;
-    
-                // Save size and dimensions of the scaled image to the attachment metadata
-                $attach_data['dim'] = wp_getimagesize($scaled_image_filepath);
-                $attach_data['size'] = filesize($scaled_image_filepath);
-            
-                wp_update_attachment_metadata($attach_id, $attach_data);
-            
-                // Get the URL of the newly named scaled image (https://your-domain.com/wp-content/uploads/nostr/s/c/<scaled hash>.ext)
-                $scaled_image_url = $base_url . '/' . $attach_data['file'];
-            
-                $response = array(
-                    "status" => "success",
-                    "message" => "File uploaded.",
-                    "nip94_event" => array(
-                        "pubkey" => $isValid["json"]["pubkey"],
-                        "content" => "",
-                        "id" => "",
-                        "created_at" => $isValid["json"]["created_at"],
-                        "kind" => 1063,
-                        "sig" => "",
-                        "tags" => array(
-                            array("url", $scaled_image_url),
-                            array("m", $movefile['type']),
-                            array("ox", $original_hash),  
-                            array("x", $scaled_image_hash),
-                            array("size", "" . $attach_data['size']),  // Added file size of the scaled image
-                            array("dim", $attach_data['dim'][0] . 'x' . $attach_data['dim'][1])  // Added dimensions of the scaled image
-                        )
-                    )
-                );
-            
-                return new WP_REST_Response($response, 200);
-            }
-            else { // probably video/* types
-                // Same as before but all resizing removed
-                $attach_data = [];
-
-                // Assign default tag (if one is selected on Settings -> Media)
-                $default_tag_id = get_option('nmu_default_tag');
-    
-                if (!empty($default_tag_id)) {
-                    wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
-                }
+            $response = nmu_processfile($movefile, $original_hash, $isValid["userId"], $mime_type, false);
         
-                // Save the original to the attachment metadata
-                $attach_data['original_file_hash'] = $original_hash;    
-                $attach_data['size'] = filesize($new_original_path);
-            
-                wp_update_attachment_metadata($attach_id, $attach_data);
-
-                $video_url = $base_url . '/nostr/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1) . '/' . $original_hash . '.' . $pathinfo['extension'];
-            
-                $response = array(
-                    "status" => "success",
-                    "message" => "File uploaded.",
-                    "nip94_event" => array(
-                        "pubkey" => $isValid["json"]["pubkey"],
-                        "content" => "",
-                        "id" => "",
-                        "created_at" => $isValid["json"]["created_at"],
-                        "kind" => 1063,
-                        "sig" => "",
-                        "tags" => array(
-                            array("url", $video_url),
-                            array("m", $movefile['type']),
-                            array("ox", $original_hash),  
-                            array("x", $original_hash),
-                            array("size", "" . $attach_data['size']) 
-                        )
-                    )
-                );
-            
-                return new WP_REST_Response($response, 200);
-            }
+            header('Content-Type: application/json');
+            echo json_encode($response->data);
+            die;
         } else {
             return new WP_Error('upload_error', $movefile['error'], array('status' => 500));
         }
@@ -459,7 +381,249 @@ function nmu_add_file_hash_to_media_library($form_fields, $post) {
 add_filter('attachment_fields_to_edit', 'nmu_add_file_hash_to_media_library', 10, 2);
 
 
+function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlossom) {
+    $base_directory = WP_CONTENT_DIR . '/uploads';
+    $base_url = content_url('/uploads');
+    
+    // Insert the file into the media library
+    require_once(ABSPATH . 'wp-admin/includes/image.php');
+        
+    $filetype = wp_check_filetype(basename($movefile['file']), null);
 
+
+    // Save uploaded file to <hash>.ext
+    $pathinfo = pathinfo($movefile['file']);
+    $ext = isset($pathinfo['extension']) ? $pathinfo['extension'] : "";
+
+    if ($ext == "") {
+        if ($mime_type == "image/jpeg") {
+            $ext = "jpg";
+        }
+        else if ($mime_type == "image/jpg") {
+            $ext = "jpg";
+        }
+        else if ($mime_type == "image/gif") {
+            $ext = "gif";
+        }
+        else if ($mime_type == "image/png") {
+            $ext = "png";
+        }
+        else if ($mime_type == "video/mp4") {
+            $ext = "mp4";
+        }
+    }
+    $new_original_path = $pathinfo['dirname'] . '/' . $original_hash . '.' . $ext;
+    rename($movefile['file'], $new_original_path);
+
+    $attachment = array(
+        'guid'           => $new_original_path,
+        'post_mime_type' => $mime_type,
+        'post_title'     => preg_replace('/\.[^.]+$/', '', basename($movefile['file'])),
+        'post_content'   => '',
+        'post_status'    => 'inherit',
+        'post_author'    => $userId
+    );
+
+    $attach_id = wp_insert_attachment($attachment, $new_original_path);
+    
+    if (strpos($filetype['type'], "video/") !== 0) { // should be image types here
+        $attach_data = wp_generate_attachment_metadata($attach_id, $new_original_path);
+
+        // Assign default tag (if one is selected on Settings -> Media)
+        $default_tag_id = get_option('nmu_default_tag');
+
+        if (!empty($default_tag_id)) {
+            wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
+        }
+
+
+        unset($attach_data["image_meta"]);
+
+        // If there is no scaled version, the scaled path and hash will default back to the original path and hash:
+        $scaled_image_path = $new_original_path;
+        $scaled_image_hash = hash_file('sha256', $base_directory . '/' . $attach_data["file"]);
+        $isScaled = $scaled_image_hash !== $original_hash;
+
+        $scaled_image_filepath = $base_directory . '/' . $attach_data["file"];
+
+        if ($isScaled) {
+            // Move file to new path nostr/s/c/<scaled hash>.ext
+            $extension = pathinfo($attach_data["file"], PATHINFO_EXTENSION);
+            $scaled_path_prefix = substr($scaled_image_hash, 0, 1) . '/' . substr($scaled_image_hash, 1, 1);
+            $new_path = 'nostr/' . $scaled_path_prefix . '/' . $scaled_image_hash . '.' .$extension;
+            
+            // Save the scaled hash to the attachment metadata
+            $attach_data['scaled_file_hash'] = $scaled_image_hash;
+
+            // New path for the scaled image
+            // From: d/0/d0c0db5b65104add337d851725c451ccd8b618bdfc017946b78cca82599a3be6-jpg.webp (original hash)
+            // To: 5/6/56ef04e3a9d61edbc8bfe0314d945bb3dc7a054d53d46b09cd7bbe188809cd36.webp (scaled hash and -scaled or other suffixes removed)
+
+            $new_scaled_image_filepath = $base_directory . '/' . $new_path;
+
+            // If the file doesn't exist check, check if directory exists, and if not, create it
+            if (!file_exists($new_scaled_image_filepath)) { 
+                $new_scaled_image_dir = dirname($new_scaled_image_filepath);
+                if (!file_exists($new_scaled_image_dir)) { // create prefix paths if they don't exist
+                    wp_mkdir_p($new_scaled_image_dir);
+                }   
+            }
+
+            // Rename the file on the disk
+            if (rename($scaled_image_filepath, $new_scaled_image_filepath)) {
+                // Update the 'file' key in the $attach_data array
+                $attach_data['file'] = $new_path;
+                
+                // Update the 'sources' key for all types
+                if (isset($attach_data['sources'])) {
+                    foreach ($attach_data['sources'] as $type => $source) {
+                        $attach_data['sources'][$type]['file'] = $attach_data['file'];
+                    }
+                }
+                $scaled_image_path = $new_path;
+                $scaled_image_filepath = $base_directory . '/' . $attach_data['file'];
+                // Update the '_wp_attached_file' meta key
+                update_post_meta($attach_id, '_wp_attached_file', $scaled_image_path);
+            }
+        }
+
+        // Save the original to the attachment metadata
+        $attach_data['original_file_hash'] = $original_hash;
+
+        // Save size and dimensions of the scaled image to the attachment metadata
+        $attach_data['dim'] = wp_getimagesize($scaled_image_filepath);
+        $attach_data['size'] = filesize($scaled_image_filepath);
+        $new_mime_type = mime_content_type($scaled_image_filepath);
+    
+        wp_update_attachment_metadata($attach_id, $attach_data);
+    
+        // Get the URL of the newly named scaled image (https://your-domain.com/wp-content/uploads/nostr/s/c/<scaled hash>.ext)
+        $scaled_image_url = $base_url . '/' . $attach_data['file'];
+
+        if ($isBlossom) {
+
+            // file creation time of $new_scaled_image_filepath
+            $file_creation_time = filectime($new_scaled_image_filepath);
+
+            $response = array(
+                "url" => $scaled_image_url,
+	            "size" => $attach_data['size'],
+	            "type" => $new_mime_type,
+	            "sha256" => $scaled_image_hash,
+	            "uploaded" => $file_creation_time,
+                "nip94" => array(
+                    "pubkey" => "",
+                    "content" => "",
+                    "id" => "",
+                    "created_at" => "",
+                    "kind" => 1063,
+                    "sig" => "",
+                    "tags" => array(
+                        array("url", $scaled_image_url),
+                        array("m", $new_mime_type),
+                        array("ox", $original_hash),  
+                        array("x", $scaled_image_hash),
+                        array("size", "" . $attach_data['size']),  // Added file size of the scaled image
+                        array("dim", $attach_data['dim'][0] . 'x' . $attach_data['dim'][1])  // Added dimensions of the scaled image
+                    )
+                )
+            );
+        }
+        else {
+            $response = array(
+                "status" => "success",
+                "message" => "File uploaded.",
+                "nip94_event" => array(
+                    "pubkey" => "",
+                    "content" => "",
+                    "id" => "",
+                    "created_at" => "",
+                    "kind" => 1063,
+                    "sig" => "",
+                    "tags" => array(
+                        array("url", $scaled_image_url),
+                        array("m", $new_mime_type),
+                        array("ox", $original_hash),  
+                        array("x", $scaled_image_hash),
+                        array("size", "" . $attach_data['size']),  // Added file size of the scaled image
+                        array("dim", $attach_data['dim'][0] . 'x' . $attach_data['dim'][1])  // Added dimensions of the scaled image
+                    )
+                )
+            );
+        }
+        return new WP_REST_Response($response, 200);
+    }
+    else { // probably video/* types
+        // Same as before but all resizing removed
+        $attach_data = [];
+
+        // Assign default tag (if one is selected on Settings -> Media)
+        $default_tag_id = get_option('nmu_default_tag');
+
+        if (!empty($default_tag_id)) {
+            wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
+        }
+
+        // Save the original to the attachment metadata
+        $attach_data['original_file_hash'] = $original_hash;    
+        $attach_data['size'] = filesize($new_original_path);
+
+        $new_mime_type = mime_content_type($new_original_path);
+    
+        wp_update_attachment_metadata($attach_id, $attach_data);
+
+        $video_url = $base_url . '/nostr/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1) . '/' . $original_hash . '.' . $pathinfo['extension'];
+    
+        if ($isBlossom) {
+            $file_creation_time = filectime($new_original_path);
+
+            $response = array(
+                "url" => $video_url,
+	            "size" => $attach_data['size'],
+	            "type" => $new_mime_type,
+	            "sha256" => $original_hash,
+	            "uploaded" => $file_creation_time,
+                "nip94_event" => array(
+                    "pubkey" => "",
+                    "content" => "",
+                    "id" => "",
+                    "created_at" => "",
+                    "kind" => 1063,
+                    "sig" => "",
+                    "tags" => array(
+                        array("url", $video_url),
+                        array("m", $new_mime_type),
+                        array("ox", $original_hash),  
+                        array("x", $original_hash),
+                        array("size", "" . $attach_data['size']) 
+                    )
+                )
+            );
+        }
+        else {
+            $response = array(
+                "status" => "success",
+                "message" => "File uploaded.",
+                "nip94_event" => array(
+                    "pubkey" => "",
+                    "content" => "",
+                    "id" => "",
+                    "created_at" => "",
+                    "kind" => 1063,
+                    "sig" => "",
+                    "tags" => array(
+                        array("url", $video_url),
+                        array("m", $new_mime_type),
+                        array("ox", $original_hash),  
+                        array("x", $original_hash),
+                        array("size", "" . $attach_data['size']) 
+                    )
+                )
+            );
+        }        
+        return new WP_REST_Response($response, 200);
+    }
+}
 
 
 // /.well-known/nostr/nip96.json response
@@ -712,8 +876,95 @@ function add_cors_http_header() {
     // Check if the origin is allowed and the path matches the allowed paths
     if (in_array(parse_url($request_uri, PHP_URL_PATH), $allowed_paths)) {
         header("Access-Control-Allow-Origin: *");
-        header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+        header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS");
         header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization");
     }
 }
 add_action( 'init', 'add_cors_http_header' );
+
+// Add rewrite rule for /media endpoint
+function nmu_add_media_rewrite_rule() {
+    add_rewrite_rule('^media/?$', 'index.php?nostr_media_upload=true', 'top');
+}
+add_action('init', 'nmu_add_media_rewrite_rule');
+
+// Add query var for /media endpoint
+function nmu_add_media_query_vars($vars) {
+    $vars[] = 'nostr_media_upload';
+    return $vars;
+}
+add_filter('query_vars', 'nmu_add_media_query_vars');
+
+// new blossom method
+// Handle PUT requests to /media endpoint
+function nmu_handle_media_put_request($wp) {
+    if (array_key_exists('nostr_media_upload', $wp->query_vars)) {
+        if ( ! function_exists( 'wp_handle_upload' ) ) {
+            require_once( ABSPATH . 'wp-admin/includes/file.php' );
+        }
+
+        // Only allow PUT requests
+        if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
+            status_header(405);
+            exit('Method Not Allowed');
+        }
+
+        // Validate authorization header
+        $isValid = nmu_validate_authorization_header();
+        if (!$isValid["valid"]) {
+            status_header(401);
+            exit($isValid["message"]);
+        }
+
+        // Get the raw input
+        $input = file_get_contents('php://input');
+        if (empty($input)) {
+            status_header(400);
+            exit('No file content provided');
+        }
+
+        // Create a temporary file
+        $temp_file = tempnam(sys_get_temp_dir(), 'nostr_media_');
+        file_put_contents($temp_file, $input);
+
+        // Detect MIME type
+        $mime_type = mime_content_type($temp_file);
+        // error_log('Detected MIME Type: ' . $mime_type);
+
+        // Get content type from headers
+        $content_type = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (empty($content_type)) {
+            unlink($temp_file);
+            status_header(400);
+            exit('Content-Type header is required');
+        }
+
+        // Create a file array similar to what $_FILES would contain
+        $file = array(
+            'name' => basename($temp_file),
+            'type' => $content_type,
+            'tmp_name' => $temp_file,
+            'error' => 0,
+            'size' => strlen($input)
+        );
+
+        // Set the global original_hash for the upload_dir filter
+        global $original_hash;
+        $original_hash = hash('sha256', $input);
+
+        // Use existing upload handling logic
+        $overrides = array(
+            'action'    => 'custom_put_upload', // Custom action name
+            'test_form' => false, // Skip form validation
+            'test_type' => false,
+        );
+        $movefile = wp_handle_upload($file, $overrides);
+
+        $response = nmu_processfile($movefile, $original_hash, $isValid["userId"], $mime_type, true);
+        
+        header('Content-Type: application/json');
+        echo json_encode($response->data);
+        die;
+    }
+}
+add_action('parse_request', 'nmu_handle_media_put_request');
