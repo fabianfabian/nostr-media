@@ -1028,6 +1028,12 @@ function sha256_handle_request_uri() {
         }
 
         if (file_exists($file_path)) {
+
+            if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
+                status_header(200);
+                exit;
+            }
+
             $url = content_url('/uploads') . '/nostr/' . $prefix . '/' . $sha256 . '.' . $ext;
             header('Location: ' . $url);
             exit;
@@ -1038,6 +1044,12 @@ function sha256_handle_request_uri() {
             foreach ($extensions as $try_ext) {
                 $file_path = WP_CONTENT_DIR . '/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $try_ext;
                 if (file_exists($file_path)) {
+
+                    if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
+                        status_header(200);
+                        exit;
+                    }
+
                     $file_url = content_url('/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $try_ext);
                     header('Location: ' . $file_url);
                     exit;
