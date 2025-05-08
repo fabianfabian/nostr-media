@@ -189,8 +189,15 @@ function nmu_validate_authorization_header() {
                 return ["valid" => false, "message" => "Kind 24242 Event is in the future."];
             }
             
-            // Get the body hash
-            $bodyHash = hash('sha256', file_get_contents('php://input'));        
+
+            $bodyHash = "";
+
+            if (($_SERVER['REQUEST_METHOD'] === 'HEAD') && (isset($headers["X-SHA-256"]))) {
+                $bodyHash = $headers["X-SHA-256"]; // from header if HEAD
+            }
+            else { // from actual included file
+                $bodyHash = hash('sha256', file_get_contents('php://input'));        
+            }
             
             // check if hash matches payload tag
             $isNotExpired = false;
@@ -876,8 +883,8 @@ function add_cors_http_header() {
     // Check if the origin is allowed and the path matches the allowed paths
     if (in_array(parse_url($request_uri, PHP_URL_PATH), $allowed_paths)) {
         header("Access-Control-Allow-Origin: *");
-        header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS");
-        header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization");
+        header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS, HEAD");
+        header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization, X-Content-Type, X-Content-Length, X-SHA-256");
     }
 }
 add_action( 'init', 'add_cors_http_header' );
@@ -896,15 +903,15 @@ function nmu_add_media_query_vars($vars) {
 add_filter('query_vars', 'nmu_add_media_query_vars');
 
 // new blossom method
-// Handle PUT requests to /media endpoint
-function nmu_handle_media_put_request($wp) {
+// Handle HEAD/PUT requests to /media endpoint
+function nmu_handle_media_put_head_request($wp) {
     if (array_key_exists('nostr_media_upload', $wp->query_vars)) {
         if ( ! function_exists( 'wp_handle_upload' ) ) {
             require_once( ABSPATH . 'wp-admin/includes/file.php' );
         }
 
-        // Only allow PUT requests
-        if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
+        // Only allow PUT or HEAD requests
+        if (($_SERVER['REQUEST_METHOD'] !== 'PUT') && ($_SERVER['REQUEST_METHOD'] !== 'HEAD')) {
             status_header(405);
             exit('Method Not Allowed');
         }
@@ -912,9 +919,31 @@ function nmu_handle_media_put_request($wp) {
         // Validate authorization header
         $isValid = nmu_validate_authorization_header();
         if (!$isValid["valid"]) {
-            status_header(401);
+            status_header(400);
+            header('x-reason: invalid auth');
             exit($isValid["message"]);
         }
+
+        $headers = getallheaders();
+
+        if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
+            if (!isset($headers['X-SHA-256'])) {
+                status_header(400);
+                header('x-reason: Missing X-SHA-256');
+                exit('Missing X-SHA-256');
+            }
+                
+            if (!isset($headers['X-Content-Type'])) {
+                status_header(400);
+                header('x-reason: Missing X-Content-Type');
+                exit('Missing X-Content-Type');
+            }
+    
+            status_header(200);
+            header('Content-Type: application/json');
+            die;
+        }
+
 
         // Get the raw input
         $input = file_get_contents('php://input');
@@ -967,4 +996,4 @@ function nmu_handle_media_put_request($wp) {
         die;
     }
 }
-add_action('parse_request', 'nmu_handle_media_put_request');
+add_action('parse_request', 'nmu_handle_media_put_head_request');
