@@ -997,3 +997,67 @@ function nmu_handle_media_put_head_request($wp) {
     }
 }
 add_action('parse_request', 'nmu_handle_media_put_head_request');
+
+// Handle SHA-256 URLs using REQUEST_URI
+add_action('init', 'sha256_handle_request_uri');
+
+function sha256_handle_request_uri() {
+    $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+    if (WP_DEBUG) {
+        error_log("sha256_handle_request_uri: request_uri=$request_uri");
+    }
+
+    // Match URLs like /646a9cde60176823024ace1f401bcf4ae44d8f6f329b02213a60edeb2ab04de3.jpg
+    if (preg_match('|^/([0-9a-f]{64})(\.[a-zA-Z0-9]+)?$|', $request_uri, $matches)) {
+        $sha256 = $matches[1];
+        $ext = "";
+        if (isset($matches[2])) { 
+            $ext = ltrim($matches[2], '.'); // Remove leading dot
+        }
+        if (WP_DEBUG) {
+            error_log("Parsed: sha256=$sha256, ext=$ext");
+        }
+
+        // Construct file path
+        $prefix = substr($sha256, 0, 1) . '/' . substr($sha256, 1, 1);
+        $file_path = WP_CONTENT_DIR . '/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $ext;
+        $file_url = content_url('/Uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $ext);
+
+        if (WP_DEBUG) {
+            error_log("Checking file: $file_path");
+        }
+
+        if (file_exists($file_path)) {
+            $url = content_url('/uploads') . '/nostr/' . $prefix . '/' . $sha256 . '.' . $ext;
+            header('Location: ' . $url);
+            exit;
+        } else {
+
+            // Check common extensions
+            $extensions = ['jpg', 'webp', 'gif', 'png', 'mp4'];
+            foreach ($extensions as $try_ext) {
+                $file_path = WP_CONTENT_DIR . '/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $try_ext;
+                if (file_exists($file_path)) {
+                    $file_url = content_url('/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $try_ext);
+                    header('Location: ' . $file_url);
+                    exit;
+                }
+            }
+
+            if (WP_DEBUG) {
+                error_log("File not found: $file_path");
+            }
+            status_header(404);
+            exit;
+        }
+    }
+}
+// // Disable trailing slashes for SHA-256 URLs
+// add_filter('redirect_canonical', 'disable_trailing_slash_for_sha256', 10, 2);
+
+// function disable_trailing_slash_for_sha256($redirect_url, $requested_url) {
+//     if (preg_match('/^[0-9a-f]{64}\.[a-zA-Z0-9]+$/', basename($requested_url))) {
+//         return false;
+//     }
+//     return $redirect_url;
+// }
