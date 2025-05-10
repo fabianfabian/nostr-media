@@ -4,7 +4,9 @@ Host images and media you post from your nostr client in your own WordPress inst
 
 ## Features
 - Upload media using HTTP Auth (NIP-98) and HTTP File Storage Integration (NIP-96)
-- Upload media using Blossom (BUD-05) - (Only 'PUT /media' for now)
+- Upload media using Blossom (BUD-05) - ('PUT /media')
+- Download media using Blossom (BUD-01) - (GET /sha256 and HEAD /sha256)
+- Mirror file from other server (BUD-04) - (PUT /mirror)
 - Keeps original image and generates a scaled version
 - Media will also be available in your WordPress back-end on the Media page.
 
