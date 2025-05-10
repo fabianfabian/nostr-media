@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Nostr Media Uploads
  * Description: Host the images you post on nostr on your own WordPress installation
- * Version: 0.12
+ * Version: 0.13
  * Author: Fabian Lachman
  */
 
@@ -57,7 +57,7 @@ function nmu_save_custom_user_profile_fields($user_id) {
 }
 
 // Check if the Authorization header matches valid NIP98 HTTP Auth 
-function nmu_validate_authorization_header() {
+function nmu_validate_authorization_header($bodyHash = "") {
     $headers = getallheaders();
 
     if (isset($headers['Authorization'])) {
@@ -190,13 +190,13 @@ function nmu_validate_authorization_header() {
             }
             
 
-            $bodyHash = "";
-
-            if (($_SERVER['REQUEST_METHOD'] === 'HEAD') && (isset($headers["X-SHA-256"]))) {
-                $bodyHash = $headers["X-SHA-256"]; // from header if HEAD
-            }
-            else { // from actual included file
-                $bodyHash = hash('sha256', file_get_contents('php://input'));        
+            if ($bodyHash == "") {
+                if (($_SERVER['REQUEST_METHOD'] === 'HEAD') && (isset($headers["X-SHA-256"]))) {
+                    $bodyHash = $headers["X-SHA-256"]; // from header if HEAD
+                }
+                else { // from actual included file
+                    $bodyHash = hash('sha256', file_get_contents('php://input'));        
+                }
             }
             
             // check if hash matches payload tag
@@ -415,8 +415,26 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
         else if ($mime_type == "image/png") {
             $ext = "png";
         }
+        else if ($mime_type == "image/webp") {
+            $ext = "webp";
+        }
+        else if ($mime_type == "image/apng") {
+            $ext = "apng";
+        }
         else if ($mime_type == "video/mp4") {
             $ext = "mp4";
+        }
+        else if ($mime_type == "image/svg+xml") {
+            $ext = "svg";
+        }
+        else if ($mime_type == "image/tiff") {
+            $ext = "tiff";
+        }
+        else if ($mime_type == "application/pdf") {
+            $ext = "pdf";
+        }
+        else if ($mime_type == "video/avif") {
+            $ext = "avif";
         }
     }
     $new_original_path = $pathinfo['dirname'] . '/' . $original_hash . '.' . $ext;
@@ -895,6 +913,7 @@ function nmu_add_media_rewrite_rule() {
 }
 add_action('init', 'nmu_add_media_rewrite_rule');
 
+
 // Add query var for /media endpoint
 function nmu_add_media_query_vars($vars) {
     $vars[] = 'nostr_media_upload';
@@ -998,6 +1017,144 @@ function nmu_handle_media_put_head_request($wp) {
 }
 add_action('parse_request', 'nmu_handle_media_put_head_request');
 
+
+
+// Add rewrite rule for /mirror endpoint
+function nmu_add_mirror_rewrite_rule() {
+    add_rewrite_rule('^mirror/?$', 'index.php?nostr_mirror_upload=true', 'top');
+}
+add_action('init', 'nmu_add_mirror_rewrite_rule');
+
+// Add query var for /mirror endpoint
+function nmu_add_mirror_query_vars($vars) {
+    $vars[] = 'nostr_mirror_upload';
+    return $vars;
+}
+add_filter('query_vars', 'nmu_add_mirror_query_vars');
+
+// blossom mirror (BUD-04)
+// Handle PUT requests to /mirror endpoint
+function nmu_handle_mirror_put_request($wp) {
+    if (array_key_exists('nostr_mirror_upload', $wp->query_vars)) {
+        if ( ! function_exists( 'wp_handle_upload' ) ) {
+            require_once( ABSPATH . 'wp-admin/includes/file.php' );
+        }
+
+        // Only allow PUT 
+        if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
+            status_header(405);
+            exit('Method Not Allowed');
+        }
+
+        // Get the JSON input
+        $input = file_get_contents('php://input');
+        if (empty($input)) {
+            status_header(400);
+            exit('No JSON content provided');
+        }
+
+        // Decode JSON
+        $json_data = json_decode($input, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !isset($json_data['url'])) {
+            status_header(400);
+            exit('Invalid JSON or missing URL');
+        }
+
+        // TODO: Should validate auth before downloading
+
+        // Download file from URL
+        $file_url = $json_data['url'];
+        $file_content = @file_get_contents($file_url);
+        if ($file_content === false) {
+            status_header(400);
+            exit('Failed to download file from URL');
+        }
+
+        $original_hash = hash('sha256', $file_content);
+
+        // Validate authorization header
+        $isValid = nmu_validate_authorization_header($original_hash);
+        if (!$isValid["valid"]) {
+            status_header(400);
+            header('x-reason: invalid auth');
+            exit($isValid["message"]);
+        }
+
+
+         // Create a temporary file
+         $temp_file = tempnam(sys_get_temp_dir(), 'nostr_media_');
+         file_put_contents($temp_file, $file_content);
+
+         // Detect MIME type
+         $mime_type = mime_content_type($temp_file);
+         $ext = "";
+         if ($ext == "") {
+            if ($mime_type == "image/jpeg") {
+                $ext = "jpg";
+            }
+            else if ($mime_type == "image/jpg") {
+                $ext = "jpg";
+            }
+            else if ($mime_type == "image/gif") {
+                $ext = "gif";
+            }
+            else if ($mime_type == "image/png") {
+                $ext = "png";
+            }
+            else if ($mime_type == "image/webp") {
+                $ext = "webp";
+            }
+            else if ($mime_type == "image/apng") {
+                $ext = "apng";
+            }
+            else if ($mime_type == "video/mp4") {
+                $ext = "mp4";
+            }
+            else if ($mime_type == "image/svg+xml") {
+                $ext = "svg";
+            }
+            else if ($mime_type == "image/tiff") {
+                $ext = "tiff";
+            }
+            else if ($mime_type == "application/pdf") {
+                $ext = "pdf";
+            }
+            else if ($mime_type == "video/avif") {
+                $ext = "avif";
+            }
+         }
+
+ 
+         $newpath = $temp_file . '.' . $ext;
+         rename($temp_file, $newpath);
+
+
+        // Create a file array similar to what $_FILES would contain
+        $file = array(
+            'name' => basename($newpath),
+            'type' => $mime_type,
+            'tmp_name' => $newpath,
+            'error' => 0,
+            'size' => strlen($file_content)
+        );
+
+        // Use existing upload handling logic
+        $overrides = array(
+            'action'    => 'custom_put_upload', // Custom action name
+            'test_form' => false, // Skip form validation
+            'test_type' => false,
+        );
+        $movefile = wp_handle_upload($file, $overrides);
+
+        $response = nmu_processfile($movefile, $original_hash, $isValid["userId"], $mime_type, true);
+        
+        header('Content-Type: application/json');
+        echo json_encode($response->data);
+        die;
+    }
+}
+add_action('parse_request', 'nmu_handle_mirror_put_request');
+
 // Handle SHA-256 URLs using REQUEST_URI
 add_action('init', 'sha256_handle_request_uri');
 
@@ -1073,3 +1230,4 @@ function sha256_handle_request_uri() {
 //     }
 //     return $redirect_url;
 // }
+
