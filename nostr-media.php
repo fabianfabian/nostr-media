@@ -234,6 +234,19 @@ function nmu_validate_authorization_header($bodyHash = "") {
                 if (WP_DEBUG) {
                     error_log("Invalid auth header");
                 }
+
+                if (!$isNotExpired) {
+                    return ["valid" => false, "message" => "Invalid auth header: expired."];
+                }
+
+                if (!$hasValidTtag) {
+                    return ["valid" => false, "message" => "Invalid auth header: invalid t tag."];
+                }
+
+                if (!$hasMatchingHashTag) {
+                    return ["valid" => false, "message" => "Invalid auth header: invalid x tag."];
+                }
+
                 return ["valid" => false, "message" => "Invalid auth header"];
             }
             
