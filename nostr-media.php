@@ -941,7 +941,7 @@ function nmu_handle_media_put_head_request($wp) {
         // Validate authorization header
         $isValid = nmu_validate_authorization_header();
         if (!$isValid["valid"]) {
-            status_header(400);
+            status_header(401);
             header('x-reason: invalid auth');
             exit($isValid["message"]);
         }
@@ -1078,7 +1078,7 @@ function nmu_handle_mirror_put_request($wp) {
         // Validate authorization header
         $isValid = nmu_validate_authorization_header($original_hash);
         if (!$isValid["valid"]) {
-            status_header(400);
+            status_header(401);
             header('x-reason: invalid auth');
             exit($isValid["message"]);
         }
