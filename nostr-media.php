@@ -888,7 +888,7 @@ function nmu_default_tag_field_callback() {
 // Allow other origins on NIP-96 paths so other browser clients can make requests
 function add_cors_http_header() {
     // Define the paths where CORS headers should be applied
-    $allowed_paths = ['/wp-json/nostrmedia/v1/upload/', '/.well-known/nostr/nip96.json']; 
+    $allowed_paths = ['/wp-json/nostrmedia/v1/upload/', '/.well-known/nostr/nip96.json', '/media', '/mirror']; 
 
     // Get the requested URI
     $request_uri = $_SERVER['REQUEST_URI'];
