@@ -201,7 +201,7 @@ function nmu_validate_authorization_header($bodyHash = "") {
             
             // check if hash matches payload tag
             $isNotExpired = false;
-            $hasUploadTag = false;
+            $hasValidTtag = false;
             $hasMatchingHashTag = false;
             foreach (array_values($json["tags"]) as $tag => $value) {
                 switch ($value[0]) {
@@ -212,8 +212,11 @@ function nmu_validate_authorization_header($bodyHash = "") {
                         }
                         break;
                     case "t":
-                        if ($value[1] == "upload") {
-                            $hasUploadTag = true;    
+                        if (($value[1] == "upload") && (($_SERVER['REQUEST_METHOD'] === 'GET') || ($_SERVER['REQUEST_METHOD'] === 'HEAD'))) {
+                            $hasValidTtag = true;    
+                        }
+                        else if (($value[1] == "delete") && ($_SERVER['REQUEST_METHOD'] === 'DELETE')) {
+                            $hasValidTtag = true;    
                         }
                         break;
                     case "x":
@@ -227,7 +230,7 @@ function nmu_validate_authorization_header($bodyHash = "") {
                 }            
             }    
 
-            if (!$isNotExpired || !$hasUploadTag || !$hasMatchingHashTag) {
+            if (!$isNotExpired || !$hasValidTtag || !$hasMatchingHashTag) {
                 if (WP_DEBUG) {
                     error_log("Invalid auth header");
                 }
@@ -890,10 +893,18 @@ function add_cors_http_header() {
     // Get the requested URI
     $request_uri = $_SERVER['REQUEST_URI'];
 
+    // Check if the path matches a SHA-256 hash pattern
+    if (preg_match('|^/([0-9a-f]{64})(\.[a-zA-Z0-9]+)?$|', $request_uri)) {
+        header("Access-Control-Allow-Origin: *");
+        header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS, HEAD, DELETE");
+        header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization, X-Content-Type, X-Content-Length, X-SHA-256");
+        return;
+    }
+
     // Check if the origin is allowed and the path matches the allowed paths
     if (in_array(parse_url($request_uri, PHP_URL_PATH), $allowed_paths)) {
         header("Access-Control-Allow-Origin: *");
-        header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS, HEAD");
+        header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS, HEAD, DELETE");
         header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization, X-Content-Type, X-Content-Length, X-SHA-256");
     }
 }
@@ -1158,6 +1169,12 @@ function sha256_handle_request_uri() {
 
     // Match URLs like /646a9cde60176823024ace1f401bcf4ae44d8f6f329b02213a60edeb2ab04de3.jpg
     if (preg_match('|^/([0-9a-f]{64})(\.[a-zA-Z0-9]+)?$|', $request_uri, $matches)) {
+        // Handle OPTIONS request for CORS preflight
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            status_header(200);
+            exit;
+        }
+
         $sha256 = $matches[1];
         $ext = "";
         if (isset($matches[2])) { 
@@ -1178,11 +1195,19 @@ function sha256_handle_request_uri() {
 
         if (file_exists($file_path)) {
 
+            // HEAD
             if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
                 status_header(200);
                 exit;
             }
 
+            // DELETE
+            if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+               delete_file($sha256);
+               exit;
+            }
+
+            // GET
             $url = content_url('/uploads') . '/nostr/' . $prefix . '/' . $sha256 . '.' . $ext;
             header('Location: ' . $url);
             exit;
@@ -1194,11 +1219,19 @@ function sha256_handle_request_uri() {
                 $file_path = WP_CONTENT_DIR . '/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $try_ext;
                 if (file_exists($file_path)) {
 
+                    // HEAD
                     if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
                         status_header(200);
                         exit;
                     }
 
+                    // DELETE
+                    if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+                        delete_file($sha256);
+                        exit;
+                    }
+
+                    // GET
                     $file_url = content_url('/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $try_ext);
                     header('Location: ' . $file_url);
                     exit;
@@ -1215,3 +1248,65 @@ function sha256_handle_request_uri() {
 }
 
 
+function delete_file($sha256) { 
+    // Validate authorization header
+    $isValid = nmu_validate_authorization_header($sha256);
+    if (!$isValid["valid"]) {
+        status_header(401);
+        header('x-reason: invalid auth');
+        exit($isValid["message"]);
+    }
+
+    // find the file and delete it, but check if the file was created by the user $isValid["userId"] using the file attachment data which was created in  nmu_processfile()
+    // First find the attachment post by searching for the hash in the attachment metadata
+    $attachments = get_posts(array(
+        'post_type' => 'attachment',
+        'meta_query' => array(
+            'relation' => 'OR',
+            array(
+                'key' => '_wp_attachment_metadata',
+                'value' => $sha256,
+                'compare' => 'LIKE'
+            )
+        ),
+        'posts_per_page' => 1
+    ));
+
+    if (empty($attachments)) {
+        status_header(404);
+        header('x-reason: file not found');
+        exit('File not found');
+    }
+
+    $attachment = $attachments[0];
+    $metadata = wp_get_attachment_metadata($attachment->ID);
+    
+    // Check if the hash matches either the scaled or original hash
+    $isValidHash = false;
+    if (isset($metadata['scaled_file_hash']) && $metadata['scaled_file_hash'] === $sha256) {
+        $isValidHash = true;
+    } else if (isset($metadata['original_file_hash']) && $metadata['original_file_hash'] === $sha256) {
+        $isValidHash = true;
+    }
+
+    if (!$isValidHash) {
+        status_header(404);
+        header('x-reason: hash not found in metadata');
+        exit('Hash not found in metadata');
+    }
+
+    // Verify the user owns this file
+    if ((intval($attachment->post_author) !== intval($isValid["userId"])) && (intval($isValid["userId"]) != 0)) {
+        status_header(401);
+        if (WP_DEBUG) {
+            error_log("delete_file: user does not own this file, owner: " . $attachment->post_author . ", user: " . $isValid["userId"]);
+        }
+        header('x-reason: invalid auth: user does not own this file');
+        exit("User does not own this file");
+    }
+
+    // Delete the attachment and its files
+    wp_delete_attachment($attachment->ID, true);
+    status_header(200);
+    exit;
+}
