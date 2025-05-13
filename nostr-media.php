@@ -231,19 +231,25 @@ function nmu_validate_authorization_header($bodyHash = "") {
             }    
 
             if (!$isNotExpired || !$hasValidTtag || !$hasMatchingHashTag) {
-                if (WP_DEBUG) {
-                    error_log("Invalid auth header");
-                }
 
                 if (!$isNotExpired) {
+                    if (WP_DEBUG) {
+                        error_log("Invalid auth header: expired.");
+                    }
                     return ["valid" => false, "message" => "Invalid auth header: expired."];
                 }
 
                 if (!$hasValidTtag) {
+                    if (WP_DEBUG) {
+                        error_log("Invalid auth header: invalid t tag.");
+                    }
                     return ["valid" => false, "message" => "Invalid auth header: invalid t tag."];
                 }
 
                 if (!$hasMatchingHashTag) {
+                    if (WP_DEBUG) {
+                        error_log("Invalid auth header: invalid x tag.");
+                    }
                     return ["valid" => false, "message" => "Invalid auth header: invalid x tag."];
                 }
 
