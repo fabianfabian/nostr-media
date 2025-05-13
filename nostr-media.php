@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Nostr Media Uploads
  * Description: Host the images you post on nostr on your own WordPress installation
- * Version: 0.13
+ * Version: 0.14
  * Author: Fabian Lachman
  */
 
@@ -537,20 +537,12 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
 	            "sha256" => $scaled_image_hash,
 	            "uploaded" => $file_creation_time,
                 "nip94" => array(
-                    "pubkey" => "",
-                    "content" => "",
-                    "id" => "",
-                    "created_at" => "",
-                    "kind" => 1063,
-                    "sig" => "",
-                    "tags" => array(
-                        array("url", $scaled_image_url),
-                        array("m", $new_mime_type),
-                        array("ox", $original_hash),  
-                        array("x", $scaled_image_hash),
-                        array("size", "" . $attach_data['size']),  // Added file size of the scaled image
-                        array("dim", $attach_data['dim'][0] . 'x' . $attach_data['dim'][1])  // Added dimensions of the scaled image
-                    )
+                    array("url", $scaled_image_url),
+                    array("m", $new_mime_type),
+                    array("ox", $original_hash),  
+                    array("x", $scaled_image_hash),
+                    array("size", "" . $attach_data['size']),  // Added file size of the scaled image
+                    array("dim", $attach_data['dim'][0] . 'x' . $attach_data['dim'][1])  // Added dimensions of the scaled image
                 )
             );
         }
