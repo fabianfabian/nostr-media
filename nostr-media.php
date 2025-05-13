@@ -1213,13 +1213,5 @@ function sha256_handle_request_uri() {
         }
     }
 }
-// // Disable trailing slashes for SHA-256 URLs
-// add_filter('redirect_canonical', 'disable_trailing_slash_for_sha256', 10, 2);
 
-// function disable_trailing_slash_for_sha256($redirect_url, $requested_url) {
-//     if (preg_match('/^[0-9a-f]{64}\.[a-zA-Z0-9]+$/', basename($requested_url))) {
-//         return false;
-//     }
-//     return $redirect_url;
-// }
 
