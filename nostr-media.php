@@ -212,7 +212,7 @@ function nmu_validate_authorization_header($bodyHash = "") {
                         }
                         break;
                     case "t":
-                        if (($value[1] == "upload") && (($_SERVER['REQUEST_METHOD'] === 'GET') || ($_SERVER['REQUEST_METHOD'] === 'HEAD'))) {
+                        if (($value[1] == "upload") && (($_SERVER['REQUEST_METHOD'] === 'PUT') || ($_SERVER['REQUEST_METHOD'] === 'HEAD'))) {
                             $hasValidTtag = true;    
                         }
                         else if (($value[1] == "delete") && ($_SERVER['REQUEST_METHOD'] === 'DELETE')) {
