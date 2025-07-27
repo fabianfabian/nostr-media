@@ -922,10 +922,13 @@ add_action('admin_notices', 'nmu_plugin_admin_notices');
 // We store in /a/b/hash.ext where /a/b/ is first 2 letters of the hash, so folder browsing does not become slow with too many files in one folder.
 
 function nmu_custom_upload_dir($uploads) {
-    // Check if we are in the specific REST route
+    // Check if we are in any of the nostr upload routes
     $current_route = $_SERVER['REQUEST_URI'] ?? '';
 
-    if (strpos($current_route, 'nostrmedia/v1/upload') !== false) {
+    if (strpos($current_route, 'nostrmedia/v1/upload') !== false || 
+        strpos($current_route, '/media') === 0 || 
+        strpos($current_route, '/upload') === 0 || 
+        strpos($current_route, '/mirror') === 0) {
             
         // Assuming $original_hash is accessible here (otherwise, you'll need to calculate it again)
         global $original_hash; // We'll set this in the file handling code later
