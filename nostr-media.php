@@ -679,6 +679,143 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
     }
 }
 
+function nmu_processfile_no_resize($movefile, $original_hash, $userId, $mime_type, $isBlossom) {
+    $base_directory = WP_CONTENT_DIR . '/uploads';
+    $base_url = content_url('/uploads');
+    
+    // Insert the file into the media library
+    require_once(ABSPATH . 'wp-admin/includes/image.php');
+        
+    $filetype = wp_check_filetype(basename($movefile['file']), null);
+
+    // Save uploaded file to <hash>.ext without any resizing
+    $pathinfo = pathinfo($movefile['file']);
+    $ext = isset($pathinfo['extension']) ? $pathinfo['extension'] : "";
+
+    if ($ext == "") {
+        if ($mime_type == "image/jpeg") {
+            $ext = "jpg";
+        }
+        else if ($mime_type == "image/jpg") {
+            $ext = "jpg";
+        }
+        else if ($mime_type == "image/gif") {
+            $ext = "gif";
+        }
+        else if ($mime_type == "image/png") {
+            $ext = "png";
+        }
+        else if ($mime_type == "image/webp") {
+            $ext = "webp";
+        }
+        else if ($mime_type == "image/apng") {
+            $ext = "apng";
+        }
+        else if ($mime_type == "video/mp4") {
+            $ext = "mp4";
+        }
+        else if ($mime_type == "audio/mp4") {
+            $ext = "m4a";
+        }
+        else if ($mime_type == "audio/aac") {
+            $ext = "aac";
+        }
+        else if ($mime_type == "audio/ogg") {
+            $ext = "ogg";
+        }
+        else if ($mime_type == "audio/opus") {
+            $ext = "opus";
+        }
+        else if ($mime_type == "image/svg+xml") {
+            $ext = "svg";
+        }
+        else if ($mime_type == "image/tiff") {
+            $ext = "tiff";
+        }
+        else if ($mime_type == "application/pdf") {
+            $ext = "pdf";
+        }
+        else if ($mime_type == "video/avif") {
+            $ext = "avif";
+        }
+    }
+    $new_original_path = $pathinfo['dirname'] . '/' . $original_hash . '.' . $ext;
+    rename($movefile['file'], $new_original_path);
+
+    $attachment = array(
+        'guid'           => $new_original_path,
+        'post_mime_type' => $mime_type,
+        'post_title'     => preg_replace('/\.[^.]+$/', '', basename($movefile['file'])),
+        'post_content'   => '',
+        'post_status'    => 'inherit',
+        'post_author'    => $userId
+    );
+
+    $attach_id = wp_insert_attachment($attachment, $new_original_path);
+    
+    // No resizing - just store metadata and file info
+    $attach_data = [];
+
+    // Assign default tag (if one is selected on Settings -> Media)
+    $default_tag_id = get_option('nmu_default_tag');
+
+    if (!empty($default_tag_id)) {
+        wp_set_object_terms($attach_id, array((int) $default_tag_id), 'post_tag', true);
+    }
+
+    // Save the original hash to the attachment metadata
+    $attach_data['original_file_hash'] = $original_hash;    
+    $attach_data['size'] = filesize($new_original_path);
+
+    $new_mime_type = mime_content_type($new_original_path);
+
+    wp_update_attachment_metadata($attach_id, $attach_data);
+
+    // Get the URL of the file
+    $file_url = $base_url . '/nostr/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1) . '/' . $original_hash . '.' . $ext;
+
+    if ($isBlossom) {
+        $file_creation_time = filectime($new_original_path);
+
+        $response = array(
+            "url" => $file_url,
+            "size" => $attach_data['size'],
+            "type" => $new_mime_type,
+            "sha256" => $original_hash,
+            "uploaded" => $file_creation_time,
+            "nip94" => array(
+                array("url", $file_url),
+                array("m", $new_mime_type),
+                array("ox", $original_hash),  
+                array("x", $original_hash), // Same as original since no resizing
+                array("size", "" . $attach_data['size'])
+            )
+        );
+    }
+    else {
+        $response = array(
+            "status" => "success",
+            "message" => "File uploaded.",
+            "nip94_event" => array(
+                "pubkey" => "",
+                "content" => "",
+                "id" => "",
+                "created_at" => "",
+                "kind" => 1063,
+                "sig" => "",
+                "tags" => array(
+                    array("url", $file_url),
+                    array("m", $new_mime_type),
+                    array("ox", $original_hash),  
+                    array("x", $original_hash), // Same as original since no resizing
+                    array("size", "" . $attach_data['size'])
+                )
+            )
+        );
+    }        
+    return new WP_REST_Response($response, 200);
+}
+
 
 // /.well-known/nostr/nip96.json response
 
@@ -924,7 +1061,7 @@ function nmu_default_tag_field_callback() {
 // Allow other origins on NIP-96 paths so other browser clients can make requests
 function add_cors_http_header() {
     // Define the paths where CORS headers should be applied
-    $allowed_paths = ['/wp-json/nostrmedia/v1/upload/', '/.well-known/nostr/nip96.json', '/media', '/mirror']; 
+    $allowed_paths = ['/wp-json/nostrmedia/v1/upload/', '/.well-known/nostr/nip96.json', '/media', '/mirror', '/upload']; 
 
     // Get the requested URI
     $request_uri = $_SERVER['REQUEST_URI'];
@@ -952,6 +1089,12 @@ function nmu_add_media_rewrite_rule() {
 }
 add_action('init', 'nmu_add_media_rewrite_rule');
 
+// Add rewrite rule for /upload endpoint
+function nmu_add_upload_rewrite_rule() {
+    add_rewrite_rule('^upload/?$', 'index.php?nostr_upload=true', 'top');
+}
+add_action('init', 'nmu_add_upload_rewrite_rule');
+
 
 // Add query var for /media endpoint
 function nmu_add_media_query_vars($vars) {
@@ -959,6 +1102,13 @@ function nmu_add_media_query_vars($vars) {
     return $vars;
 }
 add_filter('query_vars', 'nmu_add_media_query_vars');
+
+// Add query var for /upload endpoint
+function nmu_add_upload_query_vars($vars) {
+    $vars[] = 'nostr_upload';
+    return $vars;
+}
+add_filter('query_vars', 'nmu_add_upload_query_vars');
 
 // new blossom method
 // Handle HEAD/PUT requests to /media endpoint
@@ -1014,9 +1164,101 @@ function nmu_handle_media_put_head_request($wp) {
         $temp_file = tempnam(sys_get_temp_dir(), 'nostr_media_');
         file_put_contents($temp_file, $input);
 
-        // Detect MIME type
+        // Get content type from headers
+        $content_type = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (empty($content_type)) {
+            unlink($temp_file);
+            status_header(400);
+            exit('Content-Type header is required');
+        }
+
+        // Detect MIME type from file content, fallback to Content-Type header
         $mime_type = mime_content_type($temp_file);
-        // error_log('Detected MIME Type: ' . $mime_type);
+        if (!$mime_type) {
+            $content_type = $mime_type; 
+        }
+
+        // Create a file array similar to what $_FILES would contain
+        $file = array(
+            'name' => basename($temp_file),
+            'type' => $content_type,
+            'tmp_name' => $temp_file,
+            'error' => 0,
+            'size' => strlen($input)
+        );
+
+        // Set the global original_hash for the upload_dir filter
+        global $original_hash;
+        $original_hash = hash('sha256', $input);
+
+        // Use existing upload handling logic
+        $overrides = array(
+            'action'    => 'custom_put_upload', // Custom action name
+            'test_form' => false, // Skip form validation
+            'test_type' => false,
+        );
+        $movefile = wp_handle_upload($file, $overrides);
+
+        $response = nmu_processfile($movefile, $original_hash, $isValid["userId"], $content_type, true);
+        
+        header('Content-Type: application/json');
+        echo json_encode($response->data);
+        die;
+    }
+}
+add_action('parse_request', 'nmu_handle_media_put_head_request');
+
+// Handle HEAD/PUT requests to /upload endpoint (no processing)
+function nmu_handle_upload_put_head_request($wp) {
+    if (array_key_exists('nostr_upload', $wp->query_vars)) {
+        if ( ! function_exists( 'wp_handle_upload' ) ) {
+            require_once( ABSPATH . 'wp-admin/includes/file.php' );
+        }
+
+        // Only allow PUT or HEAD requests
+        if (($_SERVER['REQUEST_METHOD'] !== 'PUT') && ($_SERVER['REQUEST_METHOD'] !== 'HEAD')) {
+            status_header(405);
+            exit('Method Not Allowed');
+        }
+
+        // Validate authorization header
+        $isValid = nmu_validate_authorization_header();
+        if (!$isValid["valid"]) {
+            status_header(401);
+            header('x-reason: invalid auth');
+            exit($isValid["message"]);
+        }
+
+        $headers = getallheaders();
+
+        if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
+            if (!isset($headers['X-SHA-256'])) {
+                status_header(400);
+                header('x-reason: Missing X-SHA-256');
+                exit('Missing X-SHA-256');
+            }
+                
+            if (!isset($headers['X-Content-Type'])) {
+                status_header(400);
+                header('x-reason: Missing X-Content-Type');
+                exit('Missing X-Content-Type');
+            }
+    
+            status_header(200);
+            header('Content-Type: application/json');
+            die;
+        }
+
+        // Get the raw input
+        $input = file_get_contents('php://input');
+        if (empty($input)) {
+            status_header(400);
+            exit('No file content provided');
+        }
+
+        // Create a temporary file
+        $temp_file = tempnam(sys_get_temp_dir(), 'nostr_upload_');
+        file_put_contents($temp_file, $input);
 
         // Get content type from headers
         $content_type = $_SERVER['CONTENT_TYPE'] ?? '';
@@ -1067,7 +1309,7 @@ function nmu_handle_media_put_head_request($wp) {
         die;
     }
 }
-add_action('parse_request', 'nmu_handle_media_put_head_request');
+add_action('parse_request', 'nmu_handle_upload_put_head_request');
 
 
 
