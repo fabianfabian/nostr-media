@@ -485,10 +485,11 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
 
     $attach_id = wp_insert_attachment($attachment, $new_original_path);
     
-    if (strpos($filetype['type'], "video/") !== 0) { // should be image types here
     if (WP_DEBUG) {
         error_log("mime_type: $mime_type");
     }
+
+    if (strpos($mime_type, "image/") === 0) { // should be image types here
         $attach_data = wp_generate_attachment_metadata($attach_id, $new_original_path);
 
         // Assign default tag (if one is selected on Settings -> Media)
