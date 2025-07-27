@@ -446,6 +446,18 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
         else if ($mime_type == "video/mp4") {
             $ext = "mp4";
         }
+        else if ($mime_type == "audio/mp4") {
+            $ext = "m4a";
+        }
+        else if ($mime_type == "audio/aac") {
+            $ext = "aac";
+        }
+        else if ($mime_type == "audio/ogg") {
+            $ext = "ogg";
+        }
+        else if ($mime_type == "audio/opus") {
+            $ext = "opus";
+        }
         else if ($mime_type == "image/svg+xml") {
             $ext = "svg";
         }
@@ -474,6 +486,9 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
     $attach_id = wp_insert_attachment($attachment, $new_original_path);
     
     if (strpos($filetype['type'], "video/") !== 0) { // should be image types here
+    if (WP_DEBUG) {
+        error_log("mime_type: $mime_type");
+    }
         $attach_data = wp_generate_attachment_metadata($attach_id, $new_original_path);
 
         // Assign default tag (if one is selected on Settings -> Media)
@@ -592,7 +607,7 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
         }
         return new WP_REST_Response($response, 200);
     }
-    else { // probably video/* types
+    else { // probably video/* or audio/* types
         // Same as before but all resizing removed
         $attach_data = [];
 
@@ -611,7 +626,7 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
     
         wp_update_attachment_metadata($attach_id, $attach_data);
 
-        $video_url = $base_url . '/nostr/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1) . '/' . $original_hash . '.' . $pathinfo['extension'];
+        $video_url = $base_url . '/nostr/' . substr($original_hash, 0, 1) . '/' . substr($original_hash, 1, 1) . '/' . $original_hash . '.' . $ext;
     
         if ($isBlossom) {
             $file_creation_time = filectime($new_original_path);
@@ -706,7 +721,9 @@ function nostr_custom_parse_request($wp) {
                 "audio/mpeg",
                 "audio/mpg",
                 "audio/mpeg3",
-                "audio/mp3"
+                "audio/mp3",
+                "audio/mp4",
+                "audio/x-m4a"
             )
         );
 
@@ -1009,6 +1026,19 @@ function nmu_handle_media_put_head_request($wp) {
             exit('Content-Type header is required');
         }
 
+        if (WP_DEBUG && !empty($content_type)) {
+            error_log("content_type: $content_type");
+        }
+
+        // Detect MIME type from file content, fallback to Content-Type header
+        $mime_type = mime_content_type($temp_file);
+        if (!$mime_type) {
+            $content_type = $mime_type;
+            if (WP_DEBUG) {
+                error_log("mime_type: $mime_type");
+            }
+        }
+
         // Create a file array similar to what $_FILES would contain
         $file = array(
             'name' => basename($temp_file),
@@ -1030,7 +1060,7 @@ function nmu_handle_media_put_head_request($wp) {
         );
         $movefile = wp_handle_upload($file, $overrides);
 
-        $response = nmu_processfile($movefile, $original_hash, $isValid["userId"], $mime_type, true);
+        $response = nmu_processfile_no_resize($movefile, $original_hash, $isValid["userId"], $content_type, true);
         
         header('Content-Type: application/json');
         echo json_encode($response->data);
@@ -1106,6 +1136,7 @@ function nmu_handle_mirror_put_request($wp) {
          // Create a temporary file
          $temp_file = tempnam(sys_get_temp_dir(), 'nostr_media_');
          file_put_contents($temp_file, $file_content);
+         
 
          // Detect MIME type
          $mime_type = mime_content_type($temp_file);
@@ -1132,6 +1163,21 @@ function nmu_handle_mirror_put_request($wp) {
             else if ($mime_type == "video/mp4") {
                 $ext = "mp4";
             }
+            else if ($mime_type == "audio/x-m4a") {
+                $ext = "m4a";
+            }
+            else if ($mime_type == "audio/mp4") {
+                $ext = "m4a";
+            }
+            else if ($mime_type == "audio/aac") {
+                $ext = "aac";
+            }
+            else if ($mime_type == "audio/ogg") {
+                $ext = "ogg";
+            }
+            else if ($mime_type == "audio/opus") {
+                $ext = "opus";
+            }
             else if ($mime_type == "image/svg+xml") {
                 $ext = "svg";
             }
@@ -1144,6 +1190,10 @@ function nmu_handle_mirror_put_request($wp) {
             else if ($mime_type == "video/avif") {
                 $ext = "avif";
             }
+         }
+
+         if ($ext == "") {
+            $ext = pathinfo($file_url, PATHINFO_EXTENSION);
          }
 
  
