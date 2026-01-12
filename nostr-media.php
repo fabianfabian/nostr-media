@@ -296,6 +296,7 @@ add_action('rest_api_init', function() {
     register_rest_route('nostrmedia/v1', '/upload/', array(
         'methods' => 'POST',
         'callback' => 'nmu_handle_image_upload',
+        'permission_callback' => '__return_true' // There is no WP login, so permissions check is done in nmu_handle_image_upload() by checking nostr sig
     ));
 });
 
