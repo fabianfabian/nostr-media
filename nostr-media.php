@@ -471,6 +471,9 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
         else if ($mime_type == "video/avif") {
             $ext = "avif";
         }
+        else if ($mime_type == "application/octet-stream") {
+            $ext = "bin";
+        }
     }
     $new_original_path = $pathinfo['dirname'] . '/' . $original_hash . '.' . $ext;
     rename($movefile['file'], $new_original_path);
@@ -740,6 +743,9 @@ function nmu_processfile_no_resize($movefile, $original_hash, $userId, $mime_typ
         else if ($mime_type == "video/avif") {
             $ext = "avif";
         }
+        else if ($mime_type == "application/octet-stream") {
+            $ext = "bin";
+        }
     }
     $new_original_path = $pathinfo['dirname'] . '/' . $original_hash . '.' . $ext;
     rename($movefile['file'], $new_original_path);
@@ -862,7 +868,8 @@ function nostr_custom_parse_request($wp) {
                 "audio/mpeg3",
                 "audio/mp3",
                 "audio/mp4",
-                "audio/x-m4a"
+                "audio/x-m4a",
+                "application/octet-stream"
             )
         );
 
@@ -1436,6 +1443,9 @@ function nmu_handle_mirror_put_request($wp) {
             }
             else if ($mime_type == "video/avif") {
                 $ext = "avif";
+            } 
+            else if ($mime_type == "application/octet-stream") {
+                $ext = "bin";
             }
          }
 
@@ -1530,7 +1540,7 @@ function sha256_handle_request_uri() {
         } else {
 
             // Check common extensions
-            $extensions = ['jpg', 'webp', 'gif', 'png', 'mp4'];
+            $extensions = ['jpg', 'webp', 'gif', 'png', 'mp4', 'bin'];
             foreach ($extensions as $try_ext) {
                 $file_path = WP_CONTENT_DIR . '/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $try_ext;
                 if (file_exists($file_path)) {
