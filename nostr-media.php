@@ -1086,6 +1086,14 @@ function add_cors_http_header() {
         return;
     }
 
+    // Everything under /wp-content/uploads/nostr/
+    if (strpos($request_uri, '/wp-content/uploads/nostr/') === 0) {
+        header("Access-Control-Allow-Origin: *");
+        header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS, HEAD, DELETE");
+        header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization, X-Content-Type, X-Content-Length, X-SHA-256");
+        return;
+    }
+
     // Check if the origin is allowed and the path matches the allowed paths
     if (in_array(parse_url($request_uri, PHP_URL_PATH), $allowed_paths)) {
         header("Access-Control-Allow-Origin: *");
