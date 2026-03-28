@@ -34,6 +34,14 @@ php_value upload_max_filesize 128M
 php_value post_max_size 128M
 ```
 
+- To make sure nostr web clients don't have problems downloading your media, add this to your .htaccess to fix CORS issues
+```
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, OPTIONS, HEAD, DELETE"
+    Header always set Access-Control-Allow-Headers "X-Requested-With, Content-Type, Accept, Origin, Authorization, X-Content-Type, X-Content-Length, X-SHA-256"
+</IfModule>
+```
 
 ## Development
 1) git clone this repository
