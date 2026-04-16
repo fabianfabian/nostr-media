@@ -1297,8 +1297,11 @@ function nmu_handle_upload_put_head_request($wp) {
         }
 
         // Get the raw input
+        $nmu_write_start = microtime(true);
+        nmu_log('upload write start content_length=' . ($_SERVER['CONTENT_LENGTH'] ?? '?'));
         $input = file_get_contents('php://input');
         if (empty($input)) {
+            nmu_log(sprintf('upload write end status=empty_body read_bytes=0 dur=%.3fs', microtime(true) - $nmu_write_start));
             status_header(400);
             exit('No file content provided');
         }
@@ -1306,6 +1309,7 @@ function nmu_handle_upload_put_head_request($wp) {
         // Create a temporary file
         $temp_file = tempnam(sys_get_temp_dir(), 'nostr_upload_');
         file_put_contents($temp_file, $input);
+        nmu_log(sprintf('upload write end status=ok read_bytes=%d tmp=%s dur=%.3fs', strlen($input), $temp_file, microtime(true) - $nmu_write_start));
 
         // Get content type from headers
         $content_type = $_SERVER['CONTENT_TYPE'] ?? '';
