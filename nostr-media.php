@@ -15,6 +15,17 @@ require __DIR__ . '/vendor/autoload.php';
 use swentel\nostr\Event\Event;
 use swentel\nostr\Key\Key;
 
+// Opt-in debug logging: define('NMU_DEBUG', true) in wp-config.php to enable.
+// Logs to wp-content/nostr-media-debug.log, independent of WP_DEBUG.
+if (!function_exists('nmu_log')) {
+    function nmu_log($msg) {
+        if (!defined('NMU_DEBUG') || !NMU_DEBUG) {
+            return;
+        }
+        @error_log('[' . date('c') . '] [nmu] ' . $msg . "\n", 3, WP_CONTENT_DIR . '/nostr-media-debug.log');
+    }
+}
+
 // Add the custom field to the profile page
 add_action('show_user_profile', 'nmu_add_custom_user_profile_fields');
 add_action('edit_user_profile', 'nmu_add_custom_user_profile_fields');
@@ -59,6 +70,7 @@ function nmu_save_custom_user_profile_fields($user_id) {
 // Check if the Authorization header matches valid NIP98 HTTP Auth 
 function nmu_validate_authorization_header($bodyHash = "") {
     $headers = getallheaders();
+    nmu_log('validate method=' . ($_SERVER['REQUEST_METHOD'] ?? '-') . ' uri=' . ($_SERVER['REQUEST_URI'] ?? '-') . ' remote=' . ($_SERVER['REMOTE_ADDR'] ?? '-') . ' auth=' . (isset($headers['Authorization']) ? ('yes(len=' . strlen($headers['Authorization']) . ')') : 'NO') . ' content_length=' . ($_SERVER['CONTENT_LENGTH'] ?? '?') . ' content_type=' . ($_SERVER['CONTENT_TYPE'] ?? '-'));
 
     if (isset($headers['Authorization'])) {
 
@@ -474,6 +486,12 @@ function nmu_processfile($movefile, $original_hash, $userId, $mime_type, $isBlos
         else if ($mime_type == "application/octet-stream") {
             $ext = "bin";
         }
+        else if ($mime_type == "application/vnd.apple.mpegurl" || $mime_type == "application/x-mpegurl") {
+            $ext = "m3u8";
+        }
+        else if ($mime_type == "video/mp2t") {
+            $ext = "ts";
+        }
     }
     $new_original_path = $pathinfo['dirname'] . '/' . $original_hash . '.' . $ext;
     rename($movefile['file'], $new_original_path);
@@ -746,6 +764,12 @@ function nmu_processfile_no_resize($movefile, $original_hash, $userId, $mime_typ
         else if ($mime_type == "application/octet-stream") {
             $ext = "bin";
         }
+        else if ($mime_type == "application/vnd.apple.mpegurl" || $mime_type == "application/x-mpegurl") {
+            $ext = "m3u8";
+        }
+        else if ($mime_type == "video/mp2t") {
+            $ext = "ts";
+        }
     }
     $new_original_path = $pathinfo['dirname'] . '/' . $original_hash . '.' . $ext;
     rename($movefile['file'], $new_original_path);
@@ -869,7 +893,10 @@ function nostr_custom_parse_request($wp) {
                 "audio/mp3",
                 "audio/mp4",
                 "audio/x-m4a",
-                "application/octet-stream"
+                "application/octet-stream",
+                "application/vnd.apple.mpegurl",
+                "application/x-mpegurl",
+                "video/mp2t"
             )
         );
 
@@ -1270,8 +1297,11 @@ function nmu_handle_upload_put_head_request($wp) {
         }
 
         // Get the raw input
+        $nmu_write_start = microtime(true);
+        nmu_log('upload write start content_length=' . ($_SERVER['CONTENT_LENGTH'] ?? '?'));
         $input = file_get_contents('php://input');
         if (empty($input)) {
+            nmu_log(sprintf('upload write end status=empty_body read_bytes=0 dur=%.3fs', microtime(true) - $nmu_write_start));
             status_header(400);
             exit('No file content provided');
         }
@@ -1279,6 +1309,7 @@ function nmu_handle_upload_put_head_request($wp) {
         // Create a temporary file
         $temp_file = tempnam(sys_get_temp_dir(), 'nostr_upload_');
         file_put_contents($temp_file, $input);
+        nmu_log(sprintf('upload write end status=ok read_bytes=%d tmp=%s dur=%.3fs', strlen($input), $temp_file, microtime(true) - $nmu_write_start));
 
         // Get content type from headers
         $content_type = $_SERVER['CONTENT_TYPE'] ?? '';
@@ -1455,6 +1486,12 @@ function nmu_handle_mirror_put_request($wp) {
             else if ($mime_type == "application/octet-stream") {
                 $ext = "bin";
             }
+            else if ($mime_type == "application/vnd.apple.mpegurl" || $mime_type == "application/x-mpegurl") {
+                $ext = "m3u8";
+            }
+            else if ($mime_type == "video/mp2t") {
+                $ext = "ts";
+            }
          }
 
          if ($ext == "") {
@@ -1548,7 +1585,7 @@ function sha256_handle_request_uri() {
         } else {
 
             // Check common extensions
-            $extensions = ['jpg', 'webp', 'gif', 'png', 'mp4', 'bin'];
+            $extensions = ['jpg', 'webp', 'gif', 'png', 'mp4', 'bin', 'm3u8', 'ts'];
             foreach ($extensions as $try_ext) {
                 $file_path = WP_CONTENT_DIR . '/uploads/nostr/' . $prefix . '/' . $sha256 . '.' . $try_ext;
                 if (file_exists($file_path)) {
