@@ -957,16 +957,18 @@ add_action('admin_notices', 'nmu_plugin_admin_notices');
 // We store in /a/b/hash.ext where /a/b/ is first 2 letters of the hash, so folder browsing does not become slow with too many files in one folder.
 
 function nmu_custom_upload_dir($uploads) {
-    // Check if we are in any of the nostr upload routes
     $current_route = $_SERVER['REQUEST_URI'] ?? '';
+    
+    // Get the subfolder path (e.g., /blog)
+    $site_path = parse_url(home_url(), PHP_URL_PATH);
+    $site_path = rtrim($site_path, '/');
 
     if (strpos($current_route, 'nostrmedia/v1/upload') !== false || 
-        strpos($current_route, '/media') === 0 || 
-        strpos($current_route, '/upload') === 0 || 
-        strpos($current_route, '/mirror') === 0) {
+        strpos($current_route, $site_path . '/media') === 0 || 
+        strpos($current_route, $site_path . '/upload') === 0 || 
+        strpos($current_route, $site_path . '/mirror') === 0) {
             
-        // Assuming $original_hash is accessible here (otherwise, you'll need to calculate it again)
-        global $original_hash; // We'll set this in the file handling code later
+        global $original_hash; 
 
         $base_directory = WP_CONTENT_DIR . '/uploads';
         $base_url = content_url('/uploads');
@@ -1099,30 +1101,31 @@ function nmu_default_tag_field_callback() {
 
 // Allow other origins on NIP-96 paths so other browser clients can make requests
 function add_cors_http_header() {
-    // Define the paths where CORS headers should be applied
-    $allowed_paths = ['/wp-json/nostrmedia/v1/upload/', '/.well-known/nostr/nip96.json', '/media', '/mirror', '/upload']; 
+    $site_path = parse_url(home_url(), PHP_URL_PATH);
+    $site_path = rtrim($site_path, '/');
 
-    // Get the requested URI
+    // Prepend site path to allowed routes
+    $allowed_paths = [
+        $site_path . '/wp-json/nostrmedia/v1/upload/', 
+        $site_path . '/.well-known/nostr/nip96.json', 
+        $site_path . '/media', 
+        $site_path . '/mirror', 
+        $site_path . '/upload'
+    ]; 
+
     $request_uri = $_SERVER['REQUEST_URI'];
+    $request_path = parse_url($request_uri, PHP_URL_PATH);
+    $relative_path = substr($request_path, strlen($site_path));
 
-    // Check if the path matches a SHA-256 hash pattern
-    if (preg_match('|^/([0-9a-f]{64})(\.[a-zA-Z0-9]+)?$|', $request_uri)) {
+    // Check if the path matches a SHA-256 hash pattern (on the relative path)
+    if (preg_match('|^/([0-9a-f]{64})(\.[a-zA-Z0-9]+)?$|', $relative_path)) {
         header("Access-Control-Allow-Origin: *");
         header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS, HEAD, DELETE");
         header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization, X-Content-Type, X-Content-Length, X-SHA-256");
         return;
     }
 
-    // Everything under /wp-content/uploads/nostr/
-    if (strpos($request_uri, '/wp-content/uploads/nostr/') === 0) {
-        header("Access-Control-Allow-Origin: *");
-        header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS, HEAD, DELETE");
-        header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization, X-Content-Type, X-Content-Length, X-SHA-256");
-        return;
-    }
-
-    // Check if the origin is allowed and the path matches the allowed paths
-    if (in_array(parse_url($request_uri, PHP_URL_PATH), $allowed_paths)) {
+    if (in_array($request_path, $allowed_paths)) {
         header("Access-Control-Allow-Origin: *");
         header("Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS, HEAD, DELETE");
         header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization, X-Content-Type, X-Content-Length, X-SHA-256");
@@ -1534,12 +1537,18 @@ add_action('init', 'sha256_handle_request_uri');
 
 function sha256_handle_request_uri() {
     $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+    
+    // Get site subfolder and remove it from the URI for matching
+    $site_path = parse_url(home_url(), PHP_URL_PATH);
+    $site_path = rtrim($site_path, '/');
+    $relative_uri = substr($request_uri, strlen($site_path));
+
     if (WP_DEBUG) {
-        error_log("sha256_handle_request_uri: request_uri=$request_uri");
+        error_log("sha256_handle_request_uri: relative_uri=$relative_uri");
     }
 
-    // Match URLs like /646a9cde60176823024ace1f401bcf4ae44d8f6f329b02213a60edeb2ab04de3.jpg
-    if (preg_match('|^/([0-9a-f]{64})(\.[a-zA-Z0-9]+)?$|', $request_uri, $matches)) {
+    // Run the regex on the relative URI instead of the full request URI
+    if (preg_match('|^/([0-9a-f]{64})(\.[a-zA-Z0-9]+)?$|', $relative_uri, $matches)) {
         // Handle OPTIONS request for CORS preflight
         if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
             status_header(200);
