@@ -69,20 +69,20 @@ function nmu_save_custom_user_profile_fields($user_id) {
 
 // Check if the Authorization header matches valid NIP98 HTTP Auth 
 function nmu_validate_authorization_header($bodyHash = "") {
-    $headers = getallheaders();
-    nmu_log('validate method=' . ($_SERVER['REQUEST_METHOD'] ?? '-') . ' uri=' . ($_SERVER['REQUEST_URI'] ?? '-') . ' remote=' . ($_SERVER['REMOTE_ADDR'] ?? '-') . ' auth=' . (isset($headers['Authorization']) ? ('yes(len=' . strlen($headers['Authorization']) . ')') : 'NO') . ' content_length=' . ($_SERVER['CONTENT_LENGTH'] ?? '?') . ' content_type=' . ($_SERVER['CONTENT_TYPE'] ?? '-'));
+    $headers = array_change_key_case(getallheaders(), CASE_LOWER);
+    nmu_log('validate method=' . ($_SERVER['REQUEST_METHOD'] ?? '-') . ' uri=' . ($_SERVER['REQUEST_URI'] ?? '-') . ' remote=' . ($_SERVER['REMOTE_ADDR'] ?? '-') . ' auth=' . (isset($headers['authorization']) ? ('yes(len=' . strlen($headers['authorization']) . ')') : 'NO') . ' content_length=' . ($_SERVER['CONTENT_LENGTH'] ?? '?') . ' content_type=' . ($_SERVER['CONTENT_TYPE'] ?? '-'));
 
-    if (isset($headers['Authorization'])) {
+    if (isset($headers['authorization'])) {
 
-        if (substr($headers['Authorization'], 0, 6) !== 'Nostr ') {
+        if (substr($headers['authorization'], 0, 6) !== 'Nostr ') {
             if (WP_DEBUG) {
-                error_log("Invalid Authorization header: {$headers['Authorization']}");
+                error_log("Invalid Authorization header: {$headers['authorization']}");
             }
             return ["valid" => false, "message" => "Invalid Authorization header."];
         }
 
-        // Remove "Nostr " prefix from $headers['Authorization']
-        $base64 = substr($headers['Authorization'], 6);
+        // Remove "Nostr " prefix from $headers['authorization']
+        $base64 = substr($headers['authorization'], 6);
 
         // Decode the base64 encoded string
         $jsonString = base64_decode($base64);
@@ -203,8 +203,8 @@ function nmu_validate_authorization_header($bodyHash = "") {
             
 
             if ($bodyHash == "") {
-                if (($_SERVER['REQUEST_METHOD'] === 'HEAD') && (isset($headers["X-SHA-256"]))) {
-                    $bodyHash = $headers["X-SHA-256"]; // from header if HEAD
+                if (($_SERVER['REQUEST_METHOD'] === 'HEAD') && (isset($headers["x-sha-256"]))) {
+                    $bodyHash = $headers["x-sha-256"]; // from header if HEAD
                 }
                 else { // from actual included file
                     $bodyHash = hash('sha256', file_get_contents('php://input'));        
@@ -1179,16 +1179,16 @@ function nmu_handle_media_put_head_request($wp) {
             exit($isValid["message"]);
         }
 
-        $headers = getallheaders();
+        $headers = array_change_key_case(getallheaders(), CASE_LOWER);
 
         if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
-            if (!isset($headers['X-SHA-256'])) {
+            if (!isset($headers['x-sha-256'])) {
                 status_header(400);
                 header('x-reason: Missing X-SHA-256');
                 exit('Missing X-SHA-256');
             }
                 
-            if (!isset($headers['X-Content-Type'])) {
+            if (!isset($headers['x-content-type'])) {
                 status_header(400);
                 header('x-reason: Missing X-Content-Type');
                 exit('Missing X-Content-Type');
@@ -1276,16 +1276,16 @@ function nmu_handle_upload_put_head_request($wp) {
             exit($isValid["message"]);
         }
 
-        $headers = getallheaders();
+        $headers = array_change_key_case(getallheaders(), CASE_LOWER);
 
         if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
-            if (!isset($headers['X-SHA-256'])) {
+            if (!isset($headers['x-sha-256'])) {
                 status_header(400);
                 header('x-reason: Missing X-SHA-256');
                 exit('Missing X-SHA-256');
             }
                 
-            if (!isset($headers['X-Content-Type'])) {
+            if (!isset($headers['x-content-type'])) {
                 status_header(400);
                 header('x-reason: Missing X-Content-Type');
                 exit('Missing X-Content-Type');
@@ -1405,15 +1405,44 @@ function nmu_handle_mirror_put_request($wp) {
             exit('Invalid JSON or missing URL');
         }
 
-        // TODO: Should validate auth before downloading
+        // Authenticate the signed content hash before
+        // fetching any URL. The real bytes are checked against it below as well.
+        $mirror_headers = array_change_key_case(getallheaders(), CASE_LOWER);
+        $mirror_auth = $mirror_headers['authorization'] ?? '';
+        $mirror_event = strncmp($mirror_auth, 'Nostr ', 6) === 0
+            ? json_decode(base64_decode(substr($mirror_auth, 6), true) ?: '', true) : null;
+        $mirror_hash = '';
+        if (is_array($mirror_event) && ($mirror_event['kind'] ?? null) === 24242
+            && is_array($mirror_event['tags'] ?? null)) {
+            foreach ($mirror_event['tags'] as $tag) {
+                if (is_array($tag) && ($tag[0] ?? '') === 'x'
+                    && is_string($tag[1] ?? null) && preg_match('/^[a-f0-9]{64}$/D', $tag[1])) {
+                    $mirror_hash = $tag[1];
+                }
+            }
+        }
+        $mirror_valid = false;
+        if ($mirror_hash !== '') {
+            try { $mirror_valid = nmu_validate_authorization_header($mirror_hash)['valid']; }
+            catch (\Throwable $error) { $mirror_valid = false; }
+        }
+        if (!$mirror_valid) {
+            status_header(401);
+            header('x-reason: invalid auth');
+            exit('Invalid mirror authorization');
+        }
 
-        // Download file from URL
+        // WordPress validates HTTP(S), public hosts and every redirect. Bound
+        // download time/size; do not allow file:// or private/metadata targets.
         $file_url = $json_data['url'];
-        $file_content = @file_get_contents($file_url);
-        if ($file_content === false) {
+        $mirror_response = is_string($file_url) ? wp_safe_remote_get($file_url, array(
+            'timeout' => 20, 'redirection' => 3, 'limit_response_size' => 128 * 1024 * 1024
+        )) : new WP_Error('invalid_mirror_url');
+        if (is_wp_error($mirror_response) || wp_remote_retrieve_response_code($mirror_response) !== 200) {
             status_header(400);
             exit('Failed to download file from URL');
         }
+        $file_content = wp_remote_retrieve_body($mirror_response);
 
         $original_hash = hash('sha256', $file_content);
 

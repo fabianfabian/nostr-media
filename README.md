@@ -48,3 +48,28 @@ php_value max_input_time 300
 1) git clone this repository
 2) run ```composer install```
 3) Copy entire folder to your WordPress plugins directory
+
+## Mirror authorization regression checks
+
+Against a disposable WordPress installation with this plugin enabled:
+
+```sh
+MIRROR_TEST_BASE_URL=https://your-test-site.example python3 -m unittest discover -s tests -v
+```
+
+For a private loopback preview, optionally set `MIRROR_TEST_HOST` to its WordPress
+hostname. By default the checks submit no valid signatures. They make no deletion requests
+and must neither download nor store media. Missing/malformed mirror authorization
+must return HTTP 401 before any URL fetch. Authorized public mirroring, downloaded
+content-hash verification and rejection of local/non-HTTP URLs should additionally
+be tested with a registered Nostr account before release.
+
+Mirrors authenticate the signed Blossom hash before downloading, use WordPress's
+safe HTTP(S) client with redirect validation, and limit downloads to 128 MiB and
+20 seconds. Downloaded content must still match the signed hash before storage.
+
+For authenticated HEAD capability checks, also provide `BLOSSOM_TEST_AUTHORIZATION`
+(a fresh `Nostr ...` upload proof from a registered test account) and
+`BLOSSOM_TEST_SHA256` (its signed hash). Both `/upload` and `/media` must accept
+header names in any capitalization, including under PHP-FPM. These HEAD checks
+send no file and do not create media. Keep proofs out of logs and shell history.
